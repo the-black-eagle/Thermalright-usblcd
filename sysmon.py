@@ -5,12 +5,369 @@ import time
 import usb1
 import psutil
 import os
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import struct
 import tempfile
 
 
 TAG = 1
+
+import numpy as np
+from PIL import Image
+
+def rgb_to_rgb565(r, g, b):
+    """Convert RGB to RGB565 format"""
+    r565 = r >> 3  # 5 bits
+    g565 = g >> 2  # 6 bits
+    b565 = b >> 3  # 5 bits
+    return (r565 << 11) | (g565 << 5) | b565
+
+def rgb_to_rgb565_quantized_vectorized(rgb_array):
+    """Vectorized RGB to BGR565 quantization"""
+    # Quantize each channel
+    r_q = (rgb_array[:, :, 0] >> 3) << 3  # 5 bits
+    g_q = (rgb_array[:, :, 1] >> 2) << 2  # 6 bits  
+    b_q = (rgb_array[:, :, 2] >> 3) << 3  # 5 bits
+    
+    return np.stack([r_q, g_q, b_q], axis=2)
+
+def apply_optimized_bayer_dithering(image):
+    """Vectorized Bayer dithering - much faster than Floyd-Steinberg"""
+    # 8x8 Bayer matrix for better quality than 4x4
+    bayer_8x8 = np.array([
+        [ 0, 32,  8, 40,  2, 34, 10, 42],
+        [48, 16, 56, 24, 50, 18, 58, 26],
+        [12, 44,  4, 36, 14, 46,  6, 38],
+        [60, 28, 52, 20, 62, 30, 54, 22],
+        [ 3, 35, 11, 43,  1, 33,  9, 41],
+        [51, 19, 59, 27, 49, 17, 57, 25],
+        [15, 47,  7, 39, 13, 45,  5, 37],
+        [63, 31, 55, 23, 61, 29, 53, 21]
+    ]) / 64.0
+    
+    img_array = np.array(image, dtype=np.float32)
+    height, width = img_array.shape[:2]
+    
+    # Create threshold matrix for entire image
+    y_indices, x_indices = np.ogrid[:height, :width]
+    threshold_matrix = bayer_8x8[y_indices % 8, x_indices % 8]
+    
+    # Apply threshold to all channels at once
+    # Scale threshold to match quantization step sizes for each channel
+    r_threshold = threshold_matrix * (255 / 32)  # 5-bit quantization
+    g_threshold = threshold_matrix * (255 / 64)  # 6-bit quantization  
+    b_threshold = threshold_matrix * (255 / 32)  # 5-bit quantization
+    
+    dithered = img_array.copy()
+    dithered[:, :, 0] += r_threshold - (255 / 64)  # Center around 0
+    dithered[:, :, 1] += g_threshold - (255 / 128)
+    dithered[:, :, 2] += b_threshold - (255 / 64)
+    
+    # Clamp and quantize
+    dithered = np.clip(dithered, 0, 255)
+    quantized = rgb_to_rgb565_quantized_vectorized(dithered.astype(np.uint8))
+    
+    return Image.fromarray(quantized)
+
+def apply_blue_noise_dithering(image):
+    """Blue noise dithering - good quality with natural-looking noise pattern"""
+    # Simple blue noise approximation using random values with spatial filtering
+    img_array = np.array(image, dtype=np.float32)
+    height, width = img_array.shape[:2]
+    
+    # Generate spatially filtered noise (approximates blue noise characteristics)
+    np.random.seed(42)  # For reproducible results
+    noise = np.random.random((height, width)) * 2 - 1  # -1 to 1
+    
+    # Apply simple spatial filter to reduce low frequencies (crude blue noise)
+    from scipy import ndimage
+    kernel = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]) / 9
+    try:
+        filtered_noise = ndimage.convolve(noise, kernel, mode='wrap')
+    except ImportError:
+        # Fallback if scipy not available - use simple high-pass
+        filtered_noise = noise - np.roll(np.roll(noise, 1, axis=0), 1, axis=1)
+    
+    # Scale noise for each channel based on quantization step
+    r_noise = filtered_noise * 8   # 5-bit quantization step
+    g_noise = filtered_noise * 4   # 6-bit quantization step
+    b_noise = filtered_noise * 8   # 5-bit quantization step
+    
+    dithered = img_array.copy()
+    dithered[:, :, 0] += r_noise
+    dithered[:, :, 1] += g_noise
+    dithered[:, :, 2] += b_noise
+    
+    # Clamp and quantize
+    dithered = np.clip(dithered, 0, 255)
+    quantized = rgb_to_rgb565_quantized_vectorized(dithered.astype(np.uint8))
+    
+    return Image.fromarray(quantized)
+
+def apply_white_noise_dithering(image):
+    """Simple white noise dithering - fastest option"""
+    img_array = np.array(image, dtype=np.float32)
+    height, width = img_array.shape[:2]
+    
+    # Generate random noise for each channel
+    np.random.seed(42)  # For reproducible results
+    r_noise = (np.random.random((height, width)) - 0.5) * 16  # ±8 for 5-bit
+    g_noise = (np.random.random((height, width)) - 0.5) * 8   # ±4 for 6-bit
+    b_noise = (np.random.random((height, width)) - 0.5) * 16  # ±8 for 5-bit
+    
+    dithered = img_array.copy()
+    dithered[:, :, 0] += r_noise
+    dithered[:, :, 1] += g_noise
+    dithered[:, :, 2] += b_noise
+    
+    # Clamp and quantize
+    dithered = np.clip(dithered, 0, 255)
+    quantized = rgb_to_rgb565_quantized_vectorized(dithered.astype(np.uint8))
+    
+    return Image.fromarray(quantized)
+
+def apply_simple_error_diffusion(image):
+    """Simplified error diffusion - faster than Floyd-Steinberg but still sequential"""
+    img_array = np.array(image, dtype=np.float32)
+    height, width, channels = img_array.shape
+    
+    dithered = img_array.copy()
+    
+    for y in range(height - 1):  # Skip last row for simplicity
+        for x in range(width - 1):  # Skip last column
+            old_pixel = dithered[y, x].astype(int)
+            old_pixel = np.clip(old_pixel, 0, 255)
+            
+            # Quantize
+            new_r = (old_pixel[0] >> 3) << 3
+            new_g = (old_pixel[1] >> 2) << 2  
+            new_b = (old_pixel[2] >> 3) << 3
+            new_pixel = np.array([new_r, new_g, new_b])
+            
+            dithered[y, x] = new_pixel
+            error = old_pixel - new_pixel
+            
+            # Simplified error distribution (only to right and down)
+            dithered[y, x + 1] += error * 0.5
+            dithered[y + 1, x] += error * 0.5
+    
+    dithered = np.clip(dithered, 0, 255).astype(np.uint8)
+    return Image.fromarray(dithered)
+
+def image_to_rgb565_chunks_fast_dithering(image, dither_method='bayer'):
+    """
+    Fast dithered conversion with multiple algorithm options
+    
+    Methods:
+    - 'bayer': 8x8 Bayer matrix (best balance of speed/quality)
+    - 'blue_noise': Blue noise pattern (good for photos)  
+    - 'white_noise': Random noise (fastest)
+    - 'simple_error': Simplified error diffusion (slower but good quality)
+    """
+    
+    if dither_method == 'bayer':
+        dithered_image = apply_optimized_bayer_dithering(image)
+    elif dither_method == 'blue_noise':
+        dithered_image = apply_blue_noise_dithering(image)
+    elif dither_method == 'white_noise':
+        dithered_image = apply_white_noise_dithering(image)
+    elif dither_method == 'simple_error':
+        dithered_image = apply_simple_error_diffusion(image)
+    else:
+        raise ValueError(f"Unknown dither method: {dither_method}")
+    
+    # Get pixel data from dithered image
+    pixels = list(dithered_image.getdata())
+    
+    # Convert to BGR565 and arrange in column-major order
+    chunks = [bytearray(), bytearray(), bytearray()]
+    chunk_widths = [120, 120, 80]  # pixels per chunk
+    chunk_start = 0
+    
+    for chunk_idx, width in enumerate(chunk_widths):
+        for col in range(width):
+            actual_col = chunk_start + col
+            for row in range(240):
+                # Flip Y-axis: read from bottom to top
+                flipped_row = 239 - row
+                pixel_idx = flipped_row * 320 + actual_col
+                r, g, b = pixels[pixel_idx]
+                bgr565 = rgb_to_rgb565(r, g, b)
+                chunks[chunk_idx].extend(bgr565.to_bytes(2, 'little'))
+        chunk_start += width
+    
+    return [bytes(chunk) for chunk in chunks]
+
+# Original function without dithering for comparison
+def image_to_rgb565_chunks(image):
+    """Convert PIL image to 3 RGB565 chunks in column-major order (no dithering)"""
+    
+    pixels = list(image.getdata())
+    
+    # Convert to BGR565 and arrange in column-major order
+    chunks = [bytearray(), bytearray(), bytearray()]
+    chunk_widths = [120, 120, 80]  # pixels per chunk
+    chunk_start = 0
+    
+    for chunk_idx, width in enumerate(chunk_widths):
+        for col in range(width):
+            actual_col = chunk_start + col
+            for row in range(240):
+                # Flip Y-axis: read from bottom to top
+                flipped_row = 239 - row
+                pixel_idx = flipped_row * 320 + actual_col
+                r, g, b = pixels[pixel_idx]
+                rgb565 = rgb_to_rgb565(r, g, b)
+                chunks[chunk_idx].extend(rgb565.to_bytes(2, 'little'))
+        chunk_start += width
+    
+    return [bytes(chunk) for chunk in chunks]
+
+def apply_bayer_dithering(image, threshold_map_size=4):
+    """Apply Bayer (ordered) dithering - faster but lower quality than Floyd-Steinberg"""
+    # 4x4 Bayer matrix
+    bayer_4x4 = np.array([
+        [ 0,  8,  2, 10],
+        [12,  4, 14,  6],
+        [ 3, 11,  1,  9],
+        [15,  7, 13,  5]
+    ]) / 16.0 * 255
+    
+    img_array = np.array(image, dtype=np.float32)
+    height, width, channels = img_array.shape
+    
+    dithered = np.zeros_like(img_array)
+    
+    for y in range(height):
+        for x in range(width):
+            # Get threshold from Bayer matrix
+            threshold = bayer_4x4[y % 4, x % 4]
+            
+            # Add threshold to pixel values
+            pixel = img_array[y, x] + threshold - 127.5
+            pixel = np.clip(pixel, 0, 255).astype(int)
+            
+            # Quantize to BGR565
+            (new_r, new_g, new_b), _ = rgb_to_rgb565_quantized(
+                pixel[0], pixel[1], pixel[2]
+            )
+            
+            dithered[y, x] = [new_r, new_g, new_b]
+    
+    return Image.fromarray(dithered.astype(np.uint8))
+
+def image_to_rgb565_chunks_with_bayer_dithering(image):
+    """Convert PIL image to 3 BGR565 chunks with Bayer dithering (faster alternative)"""
+    
+    # Apply Bayer dithering
+    dithered_image = apply_bayer_dithering(image)
+    
+    # Get pixel data from dithered image
+    pixels = list(dithered_image.getdata())
+    
+    # Convert to BGR565 and arrange in column-major order
+    chunks = [bytearray(), bytearray(), bytearray()]
+    chunk_widths = [120, 120, 80]  # pixels per chunk
+    chunk_start = 0
+    
+    for chunk_idx, width in enumerate(chunk_widths):
+        for col in range(width):
+            actual_col = chunk_start + col
+            for row in range(240):
+                # Flip Y-axis: read from bottom to top
+                flipped_row = 239 - row
+                pixel_idx = flipped_row * 320 + actual_col
+                r, g, b = pixels[pixel_idx]
+                rgb565 = rgb_to_rgb565(r, g, b)
+                chunks[chunk_idx].extend(rgb565.to_bytes(2, 'little'))
+        chunk_start += width
+    
+    return [bytes(chunk) for chunk in chunks]
+
+def rgb_to_rgb565_quantized(r, g, b):
+    """Convert RGB to BGR565 and return both the quantized values and the BGR565 result"""
+    # Quantize to the bit depths used in BGR565
+    r_q = (r >> 3) << 3  # 5 bits -> back to 8 bits
+    g_q = (g >> 2) << 2  # 6 bits -> back to 8 bits  
+    b_q = (b >> 3) << 3  # 5 bits -> back to 8 bits
+    
+    # Create BGR565 value
+    r565 = r >> 3  # 5 bits
+    g565 = g >> 2  # 6 bits
+    b565 = b >> 3  # 5 bits
+    rgb565 = (b565 << 11) | (g565 << 5) | r565
+    
+    return (r_q, g_q, b_q), rgb565
+
+def apply_floyd_steinberg_dithering(image):
+    """Apply Floyd-Steinberg dithering to an image for BGR565 conversion"""
+    # Convert to numpy array for easier manipulation
+    img_array = np.array(image, dtype=np.float32)
+    height, width, channels = img_array.shape
+    
+    # Create a copy to work with
+    dithered = img_array.copy()
+    
+    for y in range(height):
+        for x in range(width):
+            # Get the old pixel values
+            old_pixel = dithered[y, x].astype(int)
+            old_pixel = np.clip(old_pixel, 0, 255)
+            
+            # Quantize to BGR565 and get the quantized RGB values
+            (new_r, new_g, new_b), _ = rgb_to_rgb565_quantized(
+                old_pixel[0], old_pixel[1], old_pixel[2]
+            )
+            new_pixel = np.array([new_r, new_g, new_b])
+            
+            # Set the new pixel
+            dithered[y, x] = new_pixel
+            
+            # Calculate quantization error
+            error = old_pixel - new_pixel
+            
+            # Distribute error to neighboring pixels using Floyd-Steinberg weights
+            if x + 1 < width:
+                dithered[y, x + 1] += error * 7/16
+            if y + 1 < height:
+                if x > 0:
+                    dithered[y + 1, x - 1] += error * 3/16
+                dithered[y + 1, x] += error * 5/16
+                if x + 1 < width:
+                    dithered[y + 1, x + 1] += error * 1/16
+    
+    # Clamp values and convert back to uint8
+    dithered = np.clip(dithered, 0, 255).astype(np.uint8)
+    return Image.fromarray(dithered)
+
+def image_to_rgb565_chunks_with_dithering(image):
+    """Convert PIL image to 3 BGR565 chunks in column-major order with dithering"""
+    
+    # Apply Floyd-Steinberg dithering first
+    dithered_image = apply_floyd_steinberg_dithering(image)
+    
+    # Get pixel data from dithered image
+    pixels = list(dithered_image.getdata())
+    
+    # Convert to BGR565 and arrange in column-major order
+    chunks = [bytearray(), bytearray(), bytearray()]
+    chunk_widths = [120, 120, 80]  # pixels per chunk
+    chunk_start = 0
+    
+    for chunk_idx, width in enumerate(chunk_widths):
+        for col in range(width):
+            actual_col = chunk_start + col
+            for row in range(240):
+                # Flip Y-axis: read from bottom to top
+                flipped_row = 239 - row
+                pixel_idx = flipped_row * 320 + actual_col
+                r, g, b = pixels[pixel_idx]
+                rgb565 = rgb_to_rgb565(r, g, b)
+                chunks[chunk_idx].extend(rgb565.to_bytes(2, 'little'))
+        chunk_start += width
+    
+    return [bytes(chunk) for chunk in chunks]
 
 def send_scsi_command(dev, cdb, data_out=None, data_in_len=0):
     """
@@ -47,21 +404,16 @@ def send_scsi_command(dev, cdb, data_out=None, data_in_len=0):
     TAG += 1
     return data_in, csw
 
-def rgb_to_bgr565(r, g, b):
-    """Convert RGB888 to BGR565 format"""
-    r5 = (r >> 3) & 0x1F
-    g6 = (g >> 2) & 0x3F  
-    b5 = (b >> 3) & 0x1F
-    return (b5 << 11) | (g6 << 5) | r5
+def rgb_to_display_format(r, g, b):
+    """Convert RGB to the 565 format the display expects"""
+    r565 = r >> 3
+    g565 = g >> 2  
+    b565 = b >> 3
+    return (r565 << 11) | (g565 << 5) | b565  # RGB565 bit order
 
-def image_to_bgr565_chunks(image):
+def image_to_rgb565_chunks_original(image):
     """Convert PIL image to 3 BGR565 chunks in column-major order"""
-    # if image.size != (320, 240):
-        # image = image.resize((320, 240))
-    
-    # # Convert to RGB if needed
-    # if image.mode != 'RGB':
-        # image = image.convert('RGB')
+
     
     pixels = list(image.getdata())
     
@@ -78,8 +430,8 @@ def image_to_bgr565_chunks(image):
                 flipped_row = 239 - row
                 pixel_idx = flipped_row * 320 + actual_col
                 r, g, b = pixels[pixel_idx]
-                bgr565 = rgb_to_bgr565(r, g, b)
-                chunks[chunk_idx].extend(bgr565.to_bytes(2, 'big'))
+                rgb565 = rgb_to_display_format(r, g, b)
+                chunks[chunk_idx].extend(rgb565.to_bytes(2, 'little'))
         chunk_start += width
     
     return [bytes(chunk) for chunk in chunks]
@@ -126,9 +478,7 @@ def get_system_info():
     
     return info
 
-def create_monitoring_image(background_path=None):
-    """Create monitoring display image with system info overlay"""
-
+def create_background_img(background_path=None):
     if background_path and os.path.exists(background_path):
         loaded = Image.open(background_path).convert("RGB")
         if loaded.size != (320, 240):
@@ -138,13 +488,17 @@ def create_monitoring_image(background_path=None):
         img = Image.new('RGB', (320, 240))
         img.paste(loaded)
     else:
-        img = Image.new('RGB', (320, 240), (20, 245, 20))
+        img = Image.new('RGB', (320, 240), (20, 40, 20))
         draw = ImageDraw.Draw(img)
         for y in range(240):
             color_val = int(20 + (y / 240) * 40)
             draw.line([(0, y), (320, y)], fill=(color_val, color_val//2, color_val)) 
+    return img
 
-    draw = ImageDraw.Draw(img)
+def create_monitoring_image(bgimg):
+    """Create monitoring display image with system info overlay"""
+
+    draw = ImageDraw.Draw(bgimg)
     
     # Load larger fonts for better readability on 2.5" screen
     try:
@@ -161,9 +515,9 @@ def create_monitoring_image(background_path=None):
     info = get_system_info()
     
     # Colors for better visibility
-    white_text = (0, 0, 0)
-    yellow_text = (255, 0, 0)
-    cyan_text = (0, 0, 255)
+    text1 = (0, 0, 0)
+    text2 = (0, 255, 0)
+    text3 = (0, 0, 255)
     
     # Time at top center (large)
     current_time = time.strftime("%H:%M")
@@ -178,43 +532,43 @@ def create_monitoring_image(background_path=None):
     date_width = date_bbox[2] - date_bbox[0]
     date_x = (320 - date_width) // 2
     
-    draw.text((time_x, 20), current_time, fill=white_text, font=font_large)
-    draw.text((date_x, 70), date_str, fill=white_text, font=font_small)
+    draw.text((time_x, 20), current_time, fill=text1, font=font_large)
+    draw.text((date_x, 70), date_str, fill=text1, font=font_small)
     
     # CPU section (left side, larger text)
-    draw.text((15, 90), "CPU", fill=yellow_text, font=font_medium)
+    draw.text((15, 90), "CPU", fill=text3, font=font_medium)
     
     # CPU temperature (if available)
     if info['cpu_temp']:
         temp_text = f"{info['cpu_temp']:.0f}°C"
-        draw.text((15, 115), temp_text, fill=cyan_text, font=font_medium)
+        draw.text((15, 115), temp_text, fill=text2, font=font_medium)
     
     # CPU usage percentage
     cpu_text = f"{info['cpu_percent']:.0f}%"
-    draw.text((90, 115), cpu_text, fill=cyan_text, font=font_medium)
+    draw.text((90, 115), cpu_text, fill=text2, font=font_medium)
     
     # CPU frequency (if available)
     try:
         cpu_freq = psutil.cpu_freq()
         if cpu_freq:
             freq_text = f"{cpu_freq.current:.0f}MHz"
-            draw.text((160, 115), freq_text, fill=cyan_text, font=font_medium)
+            draw.text((160, 115), freq_text, fill=text2, font=font_medium)
     except:
         pass
     
     # Memory info (compact)
     mem_text = f"RAM: {info['mem_percent']:.0f}% ({info['mem_used_gb']:.1f}GB)"
-    draw.text((15, 150), mem_text, fill=white_text, font=font_small)
+    draw.text((15, 150), mem_text, fill=text1, font=font_small)
     
     # Disk info (compact)  
     disk_text = f"Disk: {info['disk_percent']:.0f}% ({info['disk_free_gb']:.0f}GB free)"
-    draw.text((15, 170), disk_text, fill=white_text, font=font_small)
+    draw.text((15, 170), disk_text, fill=text1, font=font_small)
     
     # Network info (bottom, compact)
     net_text = f"↑{info['net_sent_mb']:.0f}MB ↓{info['net_recv_mb']:.0f}MB"
-    draw.text((15, 200), net_text, fill=white_text, font=font_small)
+    draw.text((15, 200), net_text, fill=text1, font=font_small)
     
-    return img
+    return bgimg
 
 def upload_image(dev, chunk_files):
     """Upload image chunks to display"""
@@ -239,7 +593,8 @@ def upload_image(dev, chunk_files):
 
 def upload_pil_image(dev, pil_image):
     """Convert PIL image to chunks and upload directly to display"""
-    chunks = image_to_bgr565_chunks(pil_image)
+    chunks = image_to_rgb565_chunks(pil_image)
+    #chunks = image_to_rgb565_chunks_fast_dithering(pil_image, 'bayer')
     chunk_sizes = [57600, 57600, 38400]
     
     for index, (chunk_data, expected_size) in enumerate(zip(chunks, chunk_sizes)):
@@ -280,7 +635,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="Linux system monitor display")
     parser.add_argument('--background', help='Background image path')
-    parser.add_argument('--interval', type=float, default=1.0, help='Update interval in seconds')
+    parser.add_argument('--interval', type=float, default=0.5, help='Update interval in seconds')
     args = parser.parse_args()
     
     vid_want = 0x0402
@@ -296,9 +651,11 @@ def main():
     print("Starting system monitor...")
     
     try:
+        bgimg = create_background_img(args.background)
         while True:
+            img = bgimg.copy()  # Fresh copy each time
             # Create monitoring image
-            img = create_monitoring_image(args.background)
+            img = create_monitoring_image(img)
             
             # For testing without USB device
             #img.save(f'monitor_output_{int(time.time())}.png')
