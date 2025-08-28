@@ -16,6 +16,136 @@ TAG = 1
 import numpy as np
 from PIL import Image
 
+import cv2
+from PIL import Image
+import time
+import threading
+import queue
+
+class VideoBackground:
+    def __init__(self, video_path, loop=True):
+        self.video_path = video_path
+        self.loop = loop
+        self.cap = None
+        self.current_frame = None
+        self.fps = 24
+        self.frame_duration = 1.0 / self.fps
+        self.last_frame_time = 0
+        self.frame_queue = queue.Queue(maxsize=24)  # Buffer a few frames
+        self.is_playing = False
+        self.playback_thread = None
+
+        # Load all frames into memory
+        self.frames = []
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Failed to open video: {video_path}")
+            return
+
+        actual_fps = cap.get(cv2.CAP_PROP_FPS)
+        if actual_fps > 0:
+            self.fps = actual_fps
+            self.frame_duration = 1.0 / self.fps
+
+        print(f"Video loaded: {video_path}")
+        print(f"FPS: {self.fps}")
+        print(f"Frame count: {int(cap.get(cv2.CAP_PROP_FRAME_COUNT))}")
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if frame_rgb.shape[:2] != (240, 320):
+                frame_rgb = cv2.resize(frame_rgb, (320, 240))
+
+            self.frames.append(Image.fromarray(frame_rgb))
+
+        cap.release()
+
+        if not self.frames:
+            print("No frames loaded from video.")
+            return
+
+        self.frame_count = len(self.frames)
+        self.current_idx = 0
+        self.forward = True
+        self.current_frame = self.frames[0]
+
+    def _read_next_frame(self):
+        """Get next frame in ping-pong order"""
+        frame = self.frames[self.current_idx]
+
+        if self.forward:
+            self.current_idx += 1
+            if self.current_idx >= self.frame_count:
+                if self.loop:
+                    self.forward = False
+                    self.current_idx = self.frame_count - 2  # Step back for reverse
+                else:
+                    return False
+        else:
+            self.current_idx -= 1
+            if self.current_idx < 0:
+                if self.loop:
+                    self.forward = True
+                    self.current_idx = 1
+                else:
+                    return False
+
+        self.current_frame = frame
+        return True
+
+    def _playback_worker(self):
+        """Background thread for smooth video playback"""
+        while self.is_playing:
+            start_time = time.time()
+
+            if self._read_next_frame() and self.current_frame:
+                try:
+                    self.frame_queue.put(self.current_frame.copy(), block=False)
+                except queue.Full:
+                    pass  # Skip frame if buffer is full
+
+            elapsed = time.time() - start_time
+            sleep_time = max(0, self.frame_duration - elapsed)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+    def start_playback(self):
+        """Start video playback in background thread"""
+        if not self.frames:
+            return False
+
+        self.is_playing = True
+        self.playback_thread = threading.Thread(target=self._playback_worker, daemon=True)
+        self.playback_thread.start()
+        return True
+
+    def stop_playback(self):
+        """Stop video playback"""
+        self.is_playing = False
+        if self.playback_thread:
+            self.playback_thread.join(timeout=1.0)
+
+    def get_current_frame(self):
+        """Get the most recent video frame"""
+        latest_frame = None
+        try:
+            while True:
+                latest_frame = self.frame_queue.get_nowait()
+        except queue.Empty:
+            pass
+
+        return latest_frame if latest_frame else self.current_frame
+
+    def close(self):
+        """Clean up resources"""
+        self.stop_playback()
+        self.frames = []
+
+
 def rgb_to_rgb565(r, g, b):
     """Convert RGB to RGB565 format"""
     r565 = r >> 3  # 5 bits
@@ -478,7 +608,15 @@ def get_system_info():
     
     return info
 
-def create_background_img(background_path=None):
+def create_background_img(background_path=None, video_background=None):
+    """Create background image - supports both static images and video frames"""
+    if video_background:
+        # Get current video frame
+        frame = video_background.get_current_frame()
+        if frame:
+            return frame
+        # Fallback to static background if video fails
+    
     if background_path and os.path.exists(background_path):
         loaded = Image.open(background_path).convert("RGB")
         if loaded.size != (320, 240):
@@ -488,6 +626,7 @@ def create_background_img(background_path=None):
         img = Image.new('RGB', (320, 240))
         img.paste(loaded)
     else:
+        # Default generated background
         img = Image.new('RGB', (320, 240), (20, 40, 20))
         draw = ImageDraw.Draw(img)
         for y in range(240):
@@ -630,12 +769,53 @@ def open_dev(vid_want, pid_want, usbcontext=None):
             return udev.open()
     raise Exception("Failed to find a device")
 
+def run_monitoring_with_video(args, dev):
+    print("Starting system monitor with video support...")
+    
+    # Initialize video background if specified
+    video_bg = None
+    if hasattr(args, 'video') and args.video:
+        video_bg = VideoBackground(args.video, loop=True)
+        if video_bg.frames:
+            video_bg.start_playback()
+            print(f"Video playback started: {args.video}")
+        else:
+            print("Failed to load video, falling back to static background")
+            video_bg = None
+    
+    try:
+        while True:
+            # Get current background (video frame or static)
+            bgimg = create_background_img(
+                background_path=getattr(args, 'background', None),
+                video_background=video_bg
+            )
+            
+            # Create monitoring image with current background
+            img = create_monitoring_image(bgimg)
+            
+            # Upload to display
+            upload_pil_image(dev, img)
+            
+            # Update rate - for 24fps video, update every ~42ms
+            # But system monitor probably doesn't need to be that fast
+            time.sleep(0.1)  # 10 FPS update rate
+            
+    except KeyboardInterrupt:
+        print("Stopping monitor...")
+    finally:
+        if video_bg:
+            video_bg.close()
+
+
 def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Linux system monitor display")
     parser.add_argument('--background', help='Background image path')
     parser.add_argument('--interval', type=float, default=0.5, help='Update interval in seconds')
+    parser.add_argument('--video', type=str, help='MP4 video file for animated background')
+
     args = parser.parse_args()
     
     vid_want = 0x0402
@@ -648,26 +828,8 @@ def main():
     dev.claimInterface(0)
     dev.resetDevice()
     
-    print("Starting system monitor...")
-    
-    try:
-        bgimg = create_background_img(args.background)
-        while True:
-            img = bgimg.copy()  # Fresh copy each time
-            # Create monitoring image
-            img = create_monitoring_image(img)
-            
-            # For testing without USB device
-            #img.save(f'monitor_output_{int(time.time())}.png')
-            #print(f"Monitor update: {time.strftime('%H:%M:%S')}")
-            
-            # Upload to display (uncomment when ready)
-            upload_pil_image(dev, img)
-            
-            time.sleep(args.interval)
-            
-    except KeyboardInterrupt:
-        print("\nMonitoring stopped")
+    run_monitoring_with_video(args, dev)
+
 
 if __name__ == "__main__":
     main()
