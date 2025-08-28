@@ -109,7 +109,7 @@ python sysmon.py
 
 - The LCD expects each frame split into **3 USB chunks**.  
 - Chunks are column-interleaved; misordering produces interlaced/stretched output.  
-- Pixel format: **RGB565 (big-endian)**.  
+- Pixel format: **RGB565 (little-endian)**.  
 - The display must be refreshed periodically; otherwise it will reset. Maximum time between refreshes has been observed to be ~ 2 swconds.
 
 ---
