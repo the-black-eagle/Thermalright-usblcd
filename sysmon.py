@@ -268,6 +268,55 @@ class VideoLCDSender:
 # -------------------------------
 # Image/Dithering Utilities
 # -------------------------------
+
+def rgb_to_rgb565_quantized_vectorized(rgb_array):
+    """Vectorized RGB to BGR565 quantization"""
+    # Quantize each channel
+
+    r_q = (rgb_array[:, :, 0] >> 3) << 3  # 5 bits
+    g_q = (rgb_array[:, :, 1] >> 2) << 2  # 6 bits  
+    b_q = (rgb_array[:, :, 2] >> 3) << 3  # 5 bits
+    
+    return np.stack([r_q, g_q, b_q], axis=2)
+
+def apply_optimized_bayer_dithering(image):
+    """Vectorized Bayer dithering - much faster than Floyd-Steinberg"""
+
+    # 8x8 Bayer matrix for better quality than 4x4
+    bayer_8x8 = np.array([
+        [ 0, 32,  8, 40,  2, 34, 10, 42],
+        [48, 16, 56, 24, 50, 18, 58, 26],
+        [12, 44,  4, 36, 14, 46,  6, 38],
+        [60, 28, 52, 20, 62, 30, 54, 22],
+        [ 3, 35, 11, 43,  1, 33,  9, 41],
+        [51, 19, 59, 27, 49, 17, 57, 25],
+        [15, 47,  7, 39, 13, 45,  5, 37],
+        [63, 31, 55, 23, 61, 29, 53, 21]
+    ]) / 64.0
+    img_array = np.array(image, dtype=np.float32)
+    height, width = img_array.shape[:2]
+    # Create threshold matrix for entire image
+    y_indices, x_indices = np.ogrid[:height, :width]
+    threshold_matrix = bayer_8x8[y_indices % 8, x_indices % 8]
+
+    # Apply threshold to all channels at once
+    # Scale threshold to match quantization step sizes for each channel
+
+    r_threshold = threshold_matrix * (255 / 32)  # 5-bit quantization
+    g_threshold = threshold_matrix * (255 / 64)  # 6-bit quantization  
+    b_threshold = threshold_matrix * (255 / 32)  # 5-bit quantization
+    
+    dithered = img_array.copy()
+    dithered[:, :, 0] += r_threshold - (255 / 64)  # Center around 0
+    dithered[:, :, 1] += g_threshold - (255 / 128)
+    dithered[:, :, 2] += b_threshold - (255 / 64)
+
+    # Clamp and quantize
+    dithered = np.clip(dithered, 0, 255)
+    quantized = rgb_to_rgb565_quantized_vectorized(dithered.astype(np.uint8))
+    
+    return Image.fromarray(quantized)
+
 def rgb_to_rgb565(r,g,b):
     r565 = r>>3
     g565 = g>>2
@@ -339,6 +388,7 @@ def create_background_img(background_path=None, video_background=None):
     for y in range(240):
         val=int(20+(y/240)*40)
         draw.line([(0,y),(320,y)],fill=(val,val//2,val))
+    img = apply_optimized_bayer_dithering(img)
     return img
 
 def create_monitoring_image(bgimg, font_large, font_medium, font_small):
@@ -413,11 +463,11 @@ def run_monitoring_with_video(args, dev):
 def main():
     import argparse
     parser=argparse.ArgumentParser()
-    parser.add_argument('--background',help='Background image path')
-    parser.add_argument('--interval',type=float,default=0.5)
-    parser.add_argument('--video',type=str)
-    parser.add_argument('--info-interval',type=float,default=0.5)
-    parser.add_argument("--video-mode",choices=["loop","pingpong"],default="loop")
+    parser.add_argument('--background', type=str, help='path to a 320x240 png', metavar='/home/lcdtest/background/01.png')
+    parser.add_argument('--interval',type=float,default=0.5, help='Time to wait between frames if not playing video', metavar='0.5')
+    parser.add_argument('--video',type=str, help='path/to/a/320x240/video.mp4', metavar='/home/lcdtest/video/01.mp4')
+    parser.add_argument('--info-interval',type=float,default=0.5, help='delay between updating info metrics (cpu info mainly) in seconds', metavar='0.5')
+    parser.add_argument('--video-mode',choices=['loop','pingpong'],default='loop', help='Loop at the end of the video or play backwards to the beginning')
     args=parser.parse_args()
     vid_want,pid_want=0x0402,0x3922
     usbcontext=usb1.USBContext()
