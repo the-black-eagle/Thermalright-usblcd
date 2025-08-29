@@ -2,7 +2,7 @@
 
 This repo contains a pure Python driver for a USB-connected LCD panel (320×240, RGB565), which has been reverse-engineered from the original Windows software and now  is fully working under Linux.
 
-The code here will only drive the Therrmalright 2.4" LCD display that identifies itself as "ALi Corp. USBLCD" with vid:0402 & pid:3922.
+The code here will only drive the Thermalright 2.4" LCD display that identifies itself as "ALi Corp. USBLCD" with vid:0402 & pid:3922.
 This device identifies itself as a disk drive and is supplied with the Thermalright Frozen Warframe coolers.
 
 This project allows you to send images and raw frames to the display without relying on proprietary software.  It can play 320x240 video as a background at roughly 20fps (windows version is 24fps) but there are command line options to alter the target frame rate and also the rate at which the overlaid info is fetched.
