@@ -5,7 +5,32 @@ This repo contains a pure Python driver for a USB-connected LCD panel (320×240,
 The code here will only drive the Therrmalright 2.4" LCD display that identifies itself as "ALi Corp. USBLCD" with vid:0402 & pid:3922.
 This device identifies itself as a disk drive and is supplied with the Thermalright Frozen Warframe coolers.
 
-This project allows you to send images and raw frames to the display without relying on proprietary software.
+This project allows you to send images and raw frames to the display without relying on proprietary software.  It can play 320x240 video as a background at roughly 20fps (windows version is 24fps) but there are command line options to alter the target frame rate and also the rate at which the overlaid info is fetched.
+
+Various options are available - 
+
+```
+python sysmon.py --help
+usage: sysmon.py [-h] [--background /home/lcdtest/background/01.png]
+                 [--interval 0.5] [--video /home/lcdtest/video/01.mp4]
+                 [--info-interval 0.5] [--video-mode {loop,pingpong}]
+
+options:
+  -h, --help            show this help message and exit
+  --background /home/lcdtest/background/01.png
+                        path to a 320x240 png
+  --interval 0.5        Time to wait between frames if not playing video
+  --video /home/lcdtest/video/01.mp4
+                        path/to/a/320x240/video.mp4
+  --info-interval 0.5   delay between updating info metrics (cpu info mainly)
+                        in seconds
+  --video-mode {loop,pingpong}
+                        Loop at the end of the video or play backwards to the
+                        beginning
+
+```
+
+If you don't choose any options, the script will choose sensible defaults and generate a gradient background.
 
 ---
 
@@ -121,7 +146,7 @@ This driver was built by reverse-engineering USB traffic from the vendor’s Win
 - Image scaling & dithering  
 - Framebuffer management & buffering  
 - Text/graphics overlay tools
-- mp4 playback as per the Windows version.
+- ~~mp4 playback as per the Windows version.~~ CPU intensive in pure python but working
 
 ---
 
