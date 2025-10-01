@@ -339,22 +339,22 @@ class DraggableTextPillow:
         popup.title(f"Edit Style: {self.tag}")
         popup.configure(bg="#2b2b2b")
         popup.columnconfigure(1, weight=1)  # make column 1 stretch
-    
+
         # --- Font family
         tk.Label(popup, text="Font:", fg="white", bg="#2b2b2b").grid(
             row=0, column=0, sticky="w", padx=5, pady=5
         )
         font_var = tk.StringVar(value=self.font_config.get("family", "DejaVu Sans"))
-        
+
         # Get available font families
         try:
             available_families = list(font.families())
         except Exception:
             available_families = ["DejaVu Sans", "Liberation Sans", "Arial", "Helvetica"]
-            
+
         font_combo = ttk.Combobox(popup, textvariable=font_var, values=available_families)
         font_combo.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    
+
         # --- Font size
         tk.Label(popup, text="Size:", fg="white", bg="#2b2b2b").grid(
             row=1, column=0, sticky="w", padx=5, pady=5
@@ -362,7 +362,7 @@ class DraggableTextPillow:
         size_var = tk.IntVar(value=self.font_config.get("size", 14))
         size_spin = tk.Spinbox(popup, from_=8, to=72, textvariable=size_var)
         size_spin.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-    
+
         # --- Style
         tk.Label(popup, text="Style:", fg="white", bg="#2b2b2b").grid(
             row=2, column=0, sticky="w", padx=5, pady=5
@@ -370,7 +370,7 @@ class DraggableTextPillow:
         style_var = tk.StringVar(value=self.font_config.get("style", "normal"))
         style_menu = ttk.Combobox(popup, textvariable=style_var, values=["normal", "bold", "italic", "bold italic"])
         style_menu.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-    
+
         # --- Color picker
         tk.Label(popup, text="Color:", fg="white", bg="#2b2b2b").grid(
             row=3, column=0, sticky="w", padx=5, pady=5
@@ -378,30 +378,30 @@ class DraggableTextPillow:
         color_var = tk.StringVar(value=self.color)
         color_entry = tk.Entry(popup, textvariable=color_var)
         color_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
-    
+
         def pick_color(self, color_var, popup):
             color = colorchooser.askcolor(parent=popup, color=self.color)[1]
             if color:
                 color_var.set(color)
-    
+
         color_btn = tk.Button(popup, text="Pick", command=lambda: pick_color(self, color_var, popup))
         color_btn.grid(row=3, column=2, padx=5, pady=5)
-    
+
         # --- Button frame
         button_frame = tk.Frame(popup, bg="#2b2b2b")
         button_frame.grid(row=4, column=0, columnspan=3, pady=10)
-    
+
         def apply():
             self.font_config["family"] = font_var.get()
             self.font_config["size"] = size_var.get()
             self.font_config["style"] = style_var.get()
             self.color = color_var.get()
             self.update_style(self.font_config, self.color)
-    
+
         def apply_and_close():
             apply()
             popup.destroy()
-    
+
         # Buttons
         save_btn = tk.Button(button_frame, text="Apply", bg="#4CAF50", fg="white", activebackground="#45A049", activeforeground="white", underline=0, command=apply)
         save_btn.pack(side="left", padx=5)
@@ -409,12 +409,12 @@ class DraggableTextPillow:
         cancel_btn.pack(side="left", padx=5)
         reset_btn = tk.Button(button_frame, text="OK", bg="#008CBA", fg="white", activebackground="#007bb5", activeforeground="white", underline=0, command=apply_and_close)
         reset_btn.pack(side="left", padx=5)
-    
+
         # Shortcuts
         popup.bind("<Control-a>", lambda e: apply_and_close())
         popup.bind("<Control-c>", lambda e: popup.destroy())
         popup.bind("<Control-o>", lambda e: reset_to_default())
-    
+
         popup.after(10, popup.grab_set)  # grab once window is viewable
         popup.wait_window()
 
@@ -425,35 +425,35 @@ class ModernToggleSwitch(tk.Canvas):
         self.variable = variable or tk.BooleanVar()
         self.width = width
         self.height = height
-        
+
         # Colors matching TRCC
         self.bg_on = "#4CAF50"
         self.bg_off = "#555555"
         self.knob_color = "#FFFFFF"
-        
+
         self.bind("<Button-1>", self.toggle)
         self.variable.trace_add("write", self.update_display)
-        
+
         self.update_display()
-    
+
     def toggle(self, event=None):
         self.variable.set(not self.variable.get())
-    
+
     def update_display(self, *args):
         self.delete("all")
-        
+
         # Background
         bg_color = self.bg_on if self.variable.get() else self.bg_off
         self.create_rounded_rect(2, 2, self.width-2, self.height-2, 
                                 radius=self.height//2, fill=bg_color, outline="")
-        
+
         # Knob
         knob_x = self.width - self.height//2 - 4 if self.variable.get() else self.height//2 + 2
         knob_radius = self.height//2 - 4
         self.create_oval(knob_x-knob_radius, self.height//2-knob_radius,
                         knob_x+knob_radius, self.height//2+knob_radius,
                         fill=self.knob_color, outline="")
-    
+
     def create_rounded_rect(self, x1, y1, x2, y2, radius=10, **kwargs):
         points = []
         for x, y in [(x1, y1+radius), (x1, y1), (x1+radius, y1),
@@ -467,22 +467,22 @@ class ModernSectionFrame(tk.Frame):
     """Modern section frame with header and toggle"""
     def __init__(self, parent, title="", toggle_var=None, **kwargs):
         super().__init__(parent, bg="#2a2a2a", **kwargs)
-        
+
         # Header frame
         header_frame = tk.Frame(self, bg="#2a2a2a", height=40)
         header_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
         header_frame.pack_propagate(False)
-        
+
         # Title
         title_label = tk.Label(header_frame, text=title, font=("Arial", 12, "bold"),
                               fg="#FFFFFF", bg="#2a2a2a")
         title_label.pack(side=tk.LEFT, pady=10)
-        
+
         # Toggle switch
         if toggle_var:
             self.toggle = ModernToggleSwitch(header_frame, toggle_var, bg="#2a2a2a")
             self.toggle.pack(side=tk.RIGHT, pady=8)
-        
+
         # Content frame
         self.content_frame = tk.Frame(self, bg="#2a2a2a")
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
@@ -491,45 +491,45 @@ class ModernModuleButton(tk.Frame):
     """Modern module button matching TRCC style"""
     def __init__(self, parent, text="", command=None, active=False, **kwargs):
         super().__init__(parent, bg="#2a2a2a", **kwargs)
-        
+
         self.active = active
         self.command = command
-        
+
         # Colors
         self.active_color = "#4A90E2"
         self.inactive_color = "#444444"
         self.hover_color = "#555555"
-        
+
         # Button frame
         self.btn_frame = tk.Frame(self, bg=self.active_color if active else self.inactive_color,
                                  relief="flat", bd=1)
         self.btn_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-        
+
         # Label
         self.label = tk.Label(self.btn_frame, text=text, font=("Arial", 9),
                              fg="#FFFFFF", bg=self.btn_frame['bg'])
         self.label.pack(expand=True, pady=8)
-        
+
         # Bind events
         for widget in [self.btn_frame, self.label]:
             widget.bind("<Button-1>", self.on_click)
             widget.bind("<Enter>", self.on_enter)
             widget.bind("<Leave>", self.on_leave)
-    
+
     def on_click(self, event):
         if self.command:
             self.command()
-    
+
     def on_enter(self, event):
         if not self.active:
             self.btn_frame.config(bg=self.hover_color)
             self.label.config(bg=self.hover_color)
-    
+
     def on_leave(self, event):
         if not self.active:
             self.btn_frame.config(bg=self.inactive_color)
             self.label.config(bg=self.inactive_color)
-    
+
     def set_active(self, active):
         self.active = active
         color = self.active_color if active else self.inactive_color
@@ -578,25 +578,25 @@ class LCDController:
         self.root.title("Linux USB LCD Controller")
         self.root.configure(bg="#1e1e1e")
         self.root.minsize(1200, 600)
-        
+
         # Configure style
         self.setup_styles()
-        
+
         # Main container
         main_container = tk.Frame(self.root, bg="#1e1e1e")
         main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # Left panel - Display
         self.setup_display_panel(main_container)
-        
+
         # Right panel - Controls
         self.setup_primary_control_panel(main_container)
         self.setup_secondary_control_panel(main_container)
-    
+
     def setup_styles(self):
         """Setup ttk styles for modern appearance"""
         style = ttk.Style()
-        
+
         # Configure progress bar style
         style.theme_use('clam')
         style.configure("Modern.Horizontal.TProgressbar",
@@ -605,48 +605,48 @@ class LCDController:
                        borderwidth=0,
                        lightcolor='#4CAF50',
                        darkcolor='#4CAF50')
-    
+
     def setup_display_panel(self, parent):
         """Setup left panel with LCD display and module buttons"""
         display_panel = tk.Frame(parent, bg="#1e1e1e")
         display_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
-        
+
         # LCD Display
         display_frame = tk.Frame(display_panel, bg="#2a2a2a", relief="solid", bd=1)
         display_frame.pack(pady=(0, 20))
-        
+
         # Title
         tk.Label(display_frame, text="LCD Display", font=("Arial", 14, "bold"),
                 fg="#FFFFFF", bg="#2a2a2a").pack(pady=(10, 5))
-        
+
         self.lcd_canvas = tk.Canvas(display_frame, width=320, height=240,
                                    bg="#000000", highlightthickness=0)
         self.lcd_canvas.pack(padx=20, pady=(0, 10))
-        
+
         # Bind events
         self.lcd_canvas.bind("<ButtonPress-1>", self.on_canvas_press)
         self.lcd_canvas.bind("<B1-Motion>", self.on_canvas_drag)
         self.lcd_canvas.bind("<ButtonRelease-1>", self.on_canvas_release)
         self.lcd_canvas.bind("<Double-Button-1>", self.on_canvas_double_click)
-        
+
         # Instructions
         instructions = tk.Label(display_frame,
                                text="• Click and drag to move items\n• Double-click to edit style",
                                fg="#CCCCCC", bg="#2a2a2a", justify="left")
         instructions.pack(pady=(0, 15))
-        
+
         # Module buttons
         self.setup_module_buttons_modern(display_panel)
-    
+
     def setup_module_buttons_modern(self, parent):
         """Setup modern module buttons grid"""
         module_frame = tk.Frame(parent, bg="#2a2a2a", relief="solid", bd=1)
         module_frame.pack(fill=tk.X)
-        
+
         # Title
         tk.Label(module_frame, text="System Modules", font=("Arial", 14, "bold"),
                 fg="#FFFFFF", bg="#2a2a2a").pack(pady=(10, 5))
-        
+
         # Button grid
         button_grid = tk.Frame(module_frame, bg="#2a2a2a")
         button_grid.pack(padx=15, pady=(0, 15))
@@ -656,22 +656,22 @@ class LCDController:
             "M1": "cpu_temp", "M2": "cpu_percent", "M3": "cpu_freq",
             "M4": "gpu_temp", "M5": "gpu_usage", "M6": "gpu_clock"
         }
-        
+
         for i in range(1, 7):
             name = f"M{i}"
             metric = config.get(name, {}).get("metric", defaults[name])
-            
+
             row = (i - 1) // 3
             col = (i - 1) % 3
-            
+
             btn = ModernModuleButton(button_grid, text=f"{name}\n{metric}",
                                    command=lambda n=name: self.set_active_module(n))
             btn.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
-            
+
             # Configure grid weights
             button_grid.grid_rowconfigure(row, weight=1)
             button_grid.grid_columnconfigure(col, weight=1)
-            
+
             self.module_buttons[name] = btn
     
     def refresh_module_buttons(self):
@@ -756,12 +756,12 @@ class LCDController:
             self.refresh_system_toggles()
             self.setup_draggable_elements()  # Refresh display
             self.update_display_immediately()
-        
+
     def setup_primary_control_panel(self, parent):
         """Setup middle panel with main controls"""
         control_panel = tk.Frame(parent, bg="#1e1e1e")
         control_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20)
-        
+
         self.setup_custom_text_modern(control_panel)
         self.setup_datetime_modern(control_panel)
         self.setup_system_info_modern(control_panel)
@@ -773,15 +773,15 @@ class LCDController:
         
         # Background section
         self.setup_background_modern(secondary_panel)
-        
+
         # Add some spacing
         spacer = tk.Frame(secondary_panel, bg="#1e1e1e", height=20)
         spacer.pack(fill=tk.X)
-        
+
         # Save configuration section
         save_section = ModernSectionFrame(secondary_panel, "Actions")
         save_section.pack(fill=tk.X, pady=(0, 15))
-        
+
         # Save button
         save_btn = tk.Button(save_section.content_frame, text="Save Configuration",
                             command=self.save_config,
@@ -795,23 +795,23 @@ class LCDController:
                          relief="flat", pady=8)
         reset_btn.pack(fill=tk.X, padx=5, pady=(0, 5))
 
-    
+
     def setup_custom_text_modern(self, parent):
         """Modern custom text section"""
         config = self.config_manager.get_config()
         custom_config = config.get("custom", {})
-        
+
         self.toggle_custom = tk.BooleanVar(value=custom_config.get("enabled", True))
         self.module_toggle_vars["custom"] = self.toggle_custom
         section = ModernSectionFrame(parent, "Custom Text", self.toggle_custom)
         section.pack(fill=tk.X, pady=(0, 15))
-        
+
         # Text input
         input_frame = tk.Frame(section.content_frame, bg="#2a2a2a")
         input_frame.pack(fill=tk.X, pady=5)
-        
+
         tk.Label(input_frame, text="Text:", fg="#CCCCCC", bg="#2a2a2a").pack(anchor="w")
-        
+
         self.custom_text_var = tk.StringVar(value=custom_config.get("text", ""))
         text_entry = tk.Entry(
             input_frame,
@@ -822,46 +822,46 @@ class LCDController:
             font=("Arial", 10)
         )
         text_entry.pack(fill=tk.X, pady=(2, 0), ipady=5)
-    
+
         # Debounced update implementation
         self._custom_text_debounce_job = None
-    
+
         def on_custom_text_change(*args):
             if self._custom_text_debounce_job is not None:
                 self.root.after_cancel(self._custom_text_debounce_job)
             self._custom_text_debounce_job = self.root.after(150, do_update)
-    
+
         def do_update():
             new_text = self.custom_text_var.get()
             self.config_manager.update_config_value("custom.text", new_text)
-            
+
             if "custom" in self.draggable_items:
                 self.draggable_items["custom"].update_text(new_text)
-            
+
             self.update_display_immediately()
             self._custom_text_debounce_job = None
-    
+
         # Simple toggle handler like date/time
         def on_custom_toggle():
             self.config_manager.update_config_value("custom.enabled", self.toggle_custom.get())
             self.update_display_immediately()
-    
+
         self.custom_text_var.trace_add("write", on_custom_text_change)
         self.toggle_custom.trace_add("write", lambda *args: on_custom_toggle())
 
-    
+
     def setup_datetime_modern(self, parent):
         """Modern date/time section with independent toggles for date and time"""
         config = self.config_manager.get_config()
-        
+
         # Outer section frame
         section = tk.Frame(parent, bg="#2a2a2a")
         section.pack(fill=tk.X, pady=(0, 15))
-        
+
         # Title
         tk.Label(section, text="Date / Time", fg="#FFFFFF", bg="#2a2a2a",
                  font=("Arial", 14, "bold")).pack(anchor="w", pady=(5, 10))
-        
+
         # --- Time controls ---
         time_config = config.get("time", {})
         self.time_toggle = tk.BooleanVar(value=time_config.get("enabled", True))
@@ -871,40 +871,40 @@ class LCDController:
         time_toggle_btn = ModernToggleSwitch(time_row, self.time_toggle, bg="#2a2a2a")
         time_toggle_btn.pack(side="left", padx=(0, 10))
         tk.Label(time_row, text="Time", fg="#CCCCCC", bg="#2a2a2a").pack(side="left")
-        
+
         self.time_format_var = tk.StringVar(value=time_config.get("format", "24h"))
-        
+
         format_frame = tk.Frame(section, bg="#2a2a2a")
         format_frame.pack(fill=tk.X, pady=(2, 5))
-        
+
         tk.Radiobutton(format_frame, text="24 Hour", variable=self.time_format_var,
-                      value="24h", fg="#CCCCCC", bg="#2a2a2a", selectcolor="#444444",
-                      activebackground="#2a2a2a", activeforeground="#FFFFFF",
-                      command=self.on_time_format_change).pack(side="left", padx=(0, 15))
-        
+                       value="24h", fg="#CCCCCC", bg="#2a2a2a", selectcolor="#444444",
+                       activebackground="#2a2a2a", activeforeground="#FFFFFF",
+                       command=self.on_time_format_change).pack(side="left", padx=(0, 15))
+
         tk.Radiobutton(format_frame, text="12 Hour", variable=self.time_format_var,
-                      value="12h", fg="#CCCCCC", bg="#2a2a2a", selectcolor="#444444",
-                      activebackground="#2a2a2a", activeforeground="#FFFFFF",
-                      command=self.on_time_format_change).pack(side="left")
-        
+                       value="12h", fg="#CCCCCC", bg="#2a2a2a", selectcolor="#444444",
+                       activebackground="#2a2a2a", activeforeground="#FFFFFF",
+                       command=self.on_time_format_change).pack(side="left")
+
         # --- Date controls ---
         date_config = config.get("date", {})
         self.date_toggle = tk.BooleanVar(value=date_config.get("enabled", True))
         date_row = tk.Frame(section, bg="#2a2a2a")
         date_row.pack(fill=tk.X, pady=(10, 5))
-        
+
         date_toggle_btn = ModernToggleSwitch(date_row, self.date_toggle, bg="#2a2a2a")
         date_toggle_btn.pack(side="left", padx=(0, 10))
         tk.Label(date_row, text="Date", fg="#CCCCCC", bg="#2a2a2a").pack(side="left")
-        
+
         self.date_format_var = tk.StringVar(value=date_config.get("format", "%d-%m-%Y"))
         date_entry = tk.Entry(date_row, textvariable=self.date_format_var,
-                             bg="#444444", fg="#FFFFFF", relief="flat", font=("Arial", 10))
+                              bg="#444444", fg="#FFFFFF", relief="flat", font=("Arial", 10))
         date_entry.pack(fill=tk.X, pady=(2, 0), ipady=5)
-        
+
         self.date_preview = tk.Label(date_row, text="", fg="#4CAF50", bg="#2a2a2a")
         self.date_preview.pack(anchor="w", pady=(2, 0))
-        
+
         # --- Bind events ---
         def on_time_toggle(*args):
             self.config_manager.update_config_value("time.enabled", self.time_toggle.get())
@@ -913,34 +913,34 @@ class LCDController:
         def on_date_toggle(*args):
             self.config_manager.update_config_value("date.enabled", self.date_toggle.get())
             self.update_display_immediately()
-        
+
         self.time_toggle.trace_add("write", on_time_toggle)
         self.module_toggle_vars["time"] = self.time_toggle
         self.module_toggle_vars["date"] = self.date_toggle
         self.date_toggle.trace_add("write", on_date_toggle)
         self.date_format_var.trace_add("write", self.on_date_format_change)
-        
+
         self.update_date_preview()
-    
+
 
     def setup_system_info_modern(self, parent):
         """Compact system info section with master toggle, CPU/GPU labels, and M1–M6 switches"""
         config = self.config_manager.get_config()
-    
+
         # Master toggle
         self.system_toggle = tk.BooleanVar(value=True)
         section = ModernSectionFrame(parent, "System Info", self.system_toggle)
         section.pack(fill=tk.X, pady=(0, 15))
-    
+
         # Track toggle vars
         if not hasattr(self, 'module_toggle_vars'):
-        self.module_toggle_vars = {}
+            self.module_toggle_vars = {}    
         def add_toggle(frame, tag, default_enabled=True):
             """Helper to add a toggle for cpu_label, gpu_label, or M1–M6"""
             conf = config.get(tag, {})
             var = tk.BooleanVar(value=conf.get("enabled", default_enabled))
             self.module_toggle_vars[tag] = var
-    
+
             # Label + toggle
             label = tk.Label(frame, text=tag.upper(), fg="#CCCCCC",
                              bg="#2a2a2a", font=("Arial", 10))
@@ -948,10 +948,10 @@ class LCDController:
     
             toggle = ModernToggleSwitch(frame, var, bg="#2a2a2a")
             toggle.pack(side="left", padx=(0, 15), pady=5)
-    
+
             # Bind: update config + preview immediately
             var.trace_add("write", lambda *args, n=tag: on_child_toggle(n))
-    
+
         # --- Handlers ---
         def on_system_toggle(*args):
             """Flip all children when master toggled by user"""
@@ -966,7 +966,7 @@ class LCDController:
             finally:
                 self._suppress_child_callback = False
             self.update_display_immediately()
-    
+
         def on_child_toggle(name, *args):
             """Child toggle changed → update config + recompute master"""
             if getattr(self, "_suppress_child_callback", False):
@@ -981,24 +981,24 @@ class LCDController:
                 finally:
                     self._suppress_system_callback = False
             self.update_display_immediately()
-    
+
         # --- CPU row ---
         cpu_row = tk.Frame(section.content_frame, bg="#2a2a2a")
         cpu_row.pack(fill=tk.X, pady=5)
         add_toggle(cpu_row, "cpu_label")
         for i in range(1, 4):
             add_toggle(cpu_row, f"M{i}")
-    
+
         # --- GPU row ---
         gpu_row = tk.Frame(section.content_frame, bg="#2a2a2a")
         gpu_row.pack(fill=tk.X, pady=5)
         add_toggle(gpu_row, "gpu_label")
         for i in range(4, 7):
             add_toggle(gpu_row, f"M{i}")
-    
+
         # Hook up master toggle
         self.system_toggle.trace_add("write", on_system_toggle)
-    
+
         # Sync master to initial child state
         self._suppress_system_callback = True
         try:
@@ -1006,41 +1006,41 @@ class LCDController:
         finally:
             self._suppress_system_callback = False
 
-    
+
     def setup_background_modern(self, parent):
         """Modern background section"""
         config = self.config_manager.get_config()
-        
+
         section = ModernSectionFrame(parent, "Background")
         section.pack(fill=tk.X, pady=(0, 15))
-        
+
         # Current background
         self.bg_path_var = tk.StringVar(value=config.get("background_path", "None"))
-        
+
         path_frame = tk.Frame(section.content_frame, bg="#2a2a2a")
         path_frame.pack(fill=tk.X, pady=5)
-        
+
         tk.Label(path_frame, text="Current:", fg="#CCCCCC", bg="#2a2a2a").pack(anchor="w")
-        
+
         path_display = tk.Label(path_frame, textvariable=self.bg_path_var,
                                fg="#4CAF50", bg="#2a2a2a", font=("Arial", 9),
                                wraplength=250, justify="left")
         path_display.pack(anchor="w", pady=(2, 0))
-        
+
         # Buttons
         btn_frame = tk.Frame(section.content_frame, bg="#2a2a2a")
         btn_frame.pack(fill=tk.X, pady=(10, 0))
-        
+
         browse_btn = tk.Button(btn_frame, text="Browse...",
                               command=self.browse_background,
                               bg="#4CAF50", fg="white", relief="flat", font=("Arial", 10))
         browse_btn.pack(side="left", padx=(0, 10), ipady=3)
-        
+
         clear_btn = tk.Button(btn_frame, text="Clear",
                              command=self.clear_background,
                              bg="#f44336", fg="white", relief="flat", font=("Arial", 10))
         clear_btn.pack(side="left", ipady=3)
-    
+
     # Event handlers
     def on_time_format_change(self):
         fmt = self.time_format_var.get()
@@ -1052,7 +1052,7 @@ class LCDController:
                 time_text = datetime.now().strftime("%I:%M %p")
             self.draggable_items["time"].update_text(time_text)
         self.update_display_immediately()
-    
+
     def on_date_format_change(self, *args):
         fmt = self.date_format_var.get()
         self.config_manager.update_config_value("date.format", fmt)
@@ -1064,7 +1064,7 @@ class LCDController:
                 self.draggable_items["date"].update_text("Invalid Format")
         self.update_date_preview()
         self.update_display_immediately()
-    
+
     def update_date_preview(self):
         fmt = self.date_format_var.get()
         try:
@@ -1072,12 +1072,12 @@ class LCDController:
             self.date_preview.config(text=f"Preview: {preview_text}")
         except Exception:
             self.date_preview.config(text="Preview: Invalid format")
-    
+
     def on_module_toggle(self, name):
         enabled = self.module_toggle_vars[name].get()
         self.config_manager.update_config_value(f"{name}.enabled", enabled)
         self.update_display_immediately()
-    
+
     def browse_background(self):
         filename = filedialog.askopenfilename(
         title="Select Background",
@@ -1092,23 +1092,23 @@ class LCDController:
             self.bg_path_var.set(os.path.basename(filename))
             self.config_manager.update_config_value("background_path", filename)
             self.update_display_immediately()
-    
+
     def clear_background(self):
         self.bg_path_var.set("None")
         self.config_manager.update_config_value("background_path", None)
         self.update_display_immediately()
-    
+
     def set_active_module(self, module_name):
         # Deactivate previous
         if self.active_module and self.active_module in self.module_buttons:
             self.module_buttons[self.active_module].set_active(False)
-        
+
         # Activate new
         self.active_module = module_name
         self.module_buttons[module_name].set_active(True)
-        
+
         self.open_module_selector(module_name)
-    
+
     def open_module_selector(self, module_name):
         popup = tk.Toplevel(self.root)
         popup.title(f"Select metric for {module_name}")
@@ -1136,16 +1136,16 @@ class LCDController:
                   bg="green", fg="white").pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="✗ Cancel", command=popup.destroy,
                   bg="red", fg="white").pack(side=tk.LEFT, padx=5)
-    
+
     def setup_draggable_elements(self):
         config = self.config_manager.get_config()
-    
+
         self.draggable_items.clear()
-    
+
         for tag, conf in config.items():
             if not isinstance(conf, dict):
                 continue  # Skip settings like background_path
-    
+
             x, y = conf.get("x", 10), conf.get("y", 10)
             font_config = conf.get("font", {"family": "DejaVu Sans", "size": 20, "style": "normal"})
             color = conf.get("color", "#FFFFFF")
@@ -1162,12 +1162,12 @@ class LCDController:
                     text = datetime.now().strftime(date_format)
                 except Exception:
                     text = datetime.now().strftime("%d-%m-%Y")
-    
+
             if tag.startswith("M"):
                 text = self.get_display_text_for_metric(conf.get("metric", "cpu_temp"), {})
             elif tag in ("cpu_label", "gpu_label", "custom"):
                 text = conf.get("text", tag)
-    
+
             self.draggable_items[tag] = DraggableTextPillow(
                 tag, text, x, y, font_config, color, self.render_lcd_image
             )
@@ -1177,7 +1177,7 @@ class LCDController:
             return float(val) if val is not None else default
         except Exception:
             return default
-    
+
     def get_display_text_for_metric(self, metric, info):
         # Handle special cases first (non-numeric or special formatting)
         if metric == "time":
@@ -1186,40 +1186,40 @@ class LCDController:
             return datetime.now().strftime("%d-%m-%Y")
         elif metric == "custom":
             return self.config_manager.get_config().get("custom_text", "Hello")
-        
+
         # Handle all numeric metrics with appropriate units and formatting
         value = self.safe_number(info.get(metric, 0))
-        
+
         # Define formatting rules for different metric types
         metric_formats = {
             # Temperature metrics
             "cpu_temp": f"{value:.0f}°C",
             "gpu_temp": f"{value:.0f}°C",
-            
+
             # Frequency metrics  
             "cpu_freq": f"{value:.0f}MHz",
             "gpu_clock": f"{value:4.0f}MHz",
-            
+
             # Percentage metrics
             "cpu_percent": f"{value:.0f}%",
             "gpu_usage": f"{value:.0f}%",
             "mem_percent": f"RAM {value:.0f}%",
             "disk_percent": f"DISK {value:.0f}%",
-            
+
             # Memory metrics
             "mem_used_gb": f"RAM {value:.1f}GB",
-            
+
             # Disk metrics
             "disk_free_gb": f"DISK {value:.0f}GB free",
-            
+
             # Fan metrics
             "gpu_fan": f"{value:.0f}RPM",
-            
+
             # Count metrics
             "cpu_count": f"{value:.0f} cores",
-            
+
         }
-        
+
         # Return formatted value if we have a rule, otherwise generic format
         return metric_formats.get(metric, f"{metric.replace('_', ' ').title()}: {value:.1f}")
 
@@ -1242,7 +1242,7 @@ class LCDController:
     def on_canvas_press(self, event):
         self.dragging_item = None
         config = self.config_manager.get_config()
-        
+
         # Only check visible items
         for tag, item in reversed(list(self.draggable_items.items())):
             if self.is_item_visible(tag, config) and item.contains(event.x, event.y):
@@ -1256,34 +1256,34 @@ class LCDController:
         if getattr(self, 'dragging_item', None):
             dx = event.x - self.drag_start_x
             dy = event.y - self.drag_start_y
-            
+
             # Move item but DON'T update LCD during drag
             self.dragging_item.move(dx, dy, update_lcd=False)
             self.drag_start_x = event.x
             self.drag_start_y = event.y
-            
+
             # Only update the canvas preview, not the LCD device
             self.update_canvas_preview_only()
 
     def on_canvas_release(self, event):
         if getattr(self, 'dragging_item', None):
             tag = self.dragging_item.tag
-            
+
             # Save final position
             self.config_manager.update_config_value(f"{tag}.x", int(self.dragging_item.x))
             self.config_manager.update_config_value(f"{tag}.y", int(self.dragging_item.y))
             self.dragging_item.dragging = False
-            
+
             # NOW update the LCD device with final position
             self.update_display_immediately()
-            
+
             self.dragging_item = None
 
     def update_canvas_preview_only(self):
         """Update only the canvas preview during drag, without USB communication"""
         try:
             config = self.config_manager.get_config()
-            
+
             bg_path = config.get("background_path") or ""
             bg_img = self.bg_manager.get_background_bytes(bg_path)
             if bg_img is not None:
@@ -1296,10 +1296,10 @@ class LCDController:
             for tag, item in self.draggable_items.items():
                 if self.is_item_visible(tag, config):
                     item.draw(draw)
-            
+
             # Update only the canvas display, skip USB
             self.draw_preview(img)
-            
+
         except Exception as e:
             print(f"Error updating canvas preview: {e}")
 
@@ -1316,7 +1316,7 @@ class LCDController:
         """Check if an item should be visible based on config"""
         if config is None:
             config = self.config_manager.get_config()
-        
+
         return config.get(tag, {}).get("enabled", True)
 
     def render_background(self):
@@ -1328,20 +1328,20 @@ class LCDController:
             img = Image.frombytes("RGB", (320, 240), bg_img)
         else:
             img = Image.new("RGB", (320, 240), "black")
-    
+
         return img
 
 
     def render_overlays(self, img):
         """Draw metrics, text, and other overlays onto an existing image."""
         draw = ImageDraw.Draw(img)
-    
+
         config = self.config_manager.get_config()
         info = self.info_poller.get_info()
         now = datetime.now()
-    
+
         text_updates = {}
-    
+
         # --- Time ---
         time_conf = config.get("time", {})
         if time_conf.get("enabled", True):
@@ -1350,7 +1350,7 @@ class LCDController:
                 text_updates["time"] = now.strftime("%H:%M")
             else:
                 text_updates["time"] = now.strftime("%I:%M %p")
-    
+
         # --- Date ---
         date_conf = config.get("date", {})
         if date_conf.get("enabled", True):
@@ -1359,18 +1359,18 @@ class LCDController:
                 text_updates["date"] = now.strftime(fmt)
             except Exception:
                 text_updates["date"] = now.strftime("%d-%m-%Y")
-    
+
         # --- Custom text (now same pattern as date/time) ---
         custom_conf = config.get("custom", {})
         if custom_conf.get("enabled", True):  # Same default as others
             text_updates["custom"] = custom_conf.get("text", "LINUX")
-    
+
         # --- CPU/GPU labels ---
         for lbl in ("cpu_label", "gpu_label"):
             conf = config.get(lbl, {})
             if conf.get("enabled", True):
                 text_updates[lbl] = conf.get("text", lbl.upper())
-    
+
         # --- Modules ---
         for module_name, module_conf in ((k, v) for k, v in config.items() if k.startswith("M")):
             if not module_conf.get("enabled", True):
@@ -1378,19 +1378,19 @@ class LCDController:
             metric = module_conf.get("metric", "")
             text = self.get_display_text_for_metric(metric, info)
             text_updates[module_name] = text
-    
+
         # Push updates to draggable items
         for tag, text in text_updates.items():
             if tag in self.draggable_items and text is not None:
                 self.draggable_items[tag].update_text(text, trigger_callback=False)
-    
+
         # Draw all items
         for tag, item in self.draggable_items.items():
             if self.is_item_visible(tag, config):
                 item.draw(draw)
-    
+
         return img
-    
+
     def render_lcd_image(self):
         """Build and send image to device (heavy, no Tkinter)."""
         img = self.render_background()  # always fetch current video frame
@@ -1404,13 +1404,13 @@ class LCDController:
             self.cached_config = self.config_manager.get_config()
             config = self.cached_config
             text_updates = {}
-    
+
             # --- Time ---
             time_conf = config.get("time", {})
             if time_conf.get("enabled", True):
                 tf = time_conf.get("format", "24h")
                 text_updates["time"] = now.strftime("%H:%M") if tf=="24h" else now.strftime("%I:%M %p")
-    
+
             # --- Date ---
             date_conf = config.get("date", {})
             if date_conf.get("enabled", True):
@@ -1419,24 +1419,24 @@ class LCDController:
                     text_updates["date"] = now.strftime(fmt)
                 except Exception:
                     text_updates["date"] = now.strftime("%d-%m-%Y")
-    
+
             # --- Custom text ---
             custom_conf = config.get("custom", {})
             if custom_conf.get("enabled", True):
                 text_updates["custom"] = custom_conf.get("text", "")
-    
+
             # --- CPU/GPU labels ---
             for lbl in ("cpu_label", "gpu_label"):
                 conf = config.get(lbl, {})
                 if conf.get("enabled", True):
                     text_updates[lbl] = conf.get("text", lbl.upper())
-    
+
             # --- Modules ---
             for module_name, module_conf in ((k, v) for k, v in config.items() if k.startswith("M")):
                 if module_conf.get("enabled", True):
                     metric = module_conf.get("metric", "")
                     text_updates[module_name] = self.get_display_text_for_metric(metric, info)
-    
+
             self.cached_metrics = text_updates
             self.last_metrics_update = now
 
@@ -1446,7 +1446,7 @@ class LCDController:
         for tag, text in self.cached_metrics.items():
             if tag in self.draggable_items and text is not None:
                 self.draggable_items[tag].update_text(text, trigger_callback=False)
-    
+
         for tag, item in self.draggable_items.items():
             if self.is_item_visible(tag, config):
                 item.draw(draw)
@@ -1455,7 +1455,7 @@ class LCDController:
         except:
             exit(1)
         return img
-    
+
     def draw_preview(self, img):
         """Update preview canvas (must be main thread)."""
         self.tk_lcd_image = ImageTk.PhotoImage(img)
@@ -1465,7 +1465,7 @@ class LCDController:
     def save_config(self):
         self.config_manager.save_config(self.config_file)
         #print(f"Configuration saved to {self.config_file}")
-        
+
     def update_display_immediately(self):
         """Request a display update in the background thread."""
         try:
@@ -1513,7 +1513,7 @@ class LCDController:
     def start_data_updates(self):
         self.is_obscured = False
         self.root.bind('<Visibility>', self.on_visibility_change)
-        
+
         # Start the LCD update timer (always 40ms)
         def lcd_update():
             if not self.updating_gui:
@@ -1521,7 +1521,7 @@ class LCDController:
                     self.update_display_immediately()
                 except Exception as e:
                     print(f"LCD update error: {e}")
-            
+
             # Always schedule next LCD update at 40ms
             self.root.after(40, lcd_update)
 
@@ -1555,7 +1555,7 @@ class LCDController:
                 previous_interval = interval
                 
             self.root.after(interval, gui_poll)
-        
+
         # Start both timers
         lcd_update()
         gui_poll()
