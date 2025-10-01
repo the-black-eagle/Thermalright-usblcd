@@ -536,6 +536,10 @@ class ModernModuleButton(tk.Frame):
         self.btn_frame.config(bg=color)
         self.label.config(bg=color)
 
+    def set_text(self, text):
+        """Update the label text."""
+        self.label.config(text=text)
+
 class LCDController:
     def __init__(self, root, config_file="lcd_config.json"):
         self.root = root
@@ -670,22 +674,94 @@ class LCDController:
             
             self.module_buttons[name] = btn
     
+    def refresh_module_buttons(self):
+        """Update module button labels and states based on current config"""
+        config = self.config_manager.get_config()
+
+        for name, btn in self.module_buttons.items():
+            entry = config.get(name, {})
+            metric = entry.get("metric", name)
+            enabled = entry.get("enabled", True)
+
+            btn.set_text(f"{name}\n{metric}")
+            btn.set_active(enabled)
+
+    def refresh_system_toggles(self):
+        """Update toggle states and module UI from current config without triggering traces."""
+        config = self.config_manager.get_config()
+
+        # Ensure suppression flags exist
+        self._suppress_child_callback = getattr(self, "_suppress_child_callback", False)
+        self._suppress_system_callback = getattr(self, "_suppress_system_callback", False)
+
+        # Suppress child callbacks while we bulk set variables so we don't write back into config
+        self._suppress_child_callback = True
+        self._suppress_system_callback = True
+        try:
+            # Update all toggle BooleanVars tracked in module_toggle_vars
+            for name, var in self.module_toggle_vars.items():
+                conf = config.get(name, {})
+                enabled = conf.get("enabled", True)
+                # Set the var - trace handler will not run because we're suppressing
+                var.set(bool(enabled))
+
+                # Also update any corresponding module button appearance
+                btn = self.module_buttons.get(name)
+                if btn is not None:
+                    # If you have label/metric info in config, update text too
+                    metric = conf.get("metric", name)
+                    # ModernModuleButton has set_text and set_active
+                    try:
+                        btn.set_text(f"{name}\n{metric}")
+                    except Exception:
+                        pass
+                    try:
+                        btn.set_active(bool(enabled))
+                    except Exception:
+                        pass
+
+
+        finally:
+            # Turn suppression off so normal user interactions work again
+            self._suppress_child_callback = False
+            self._suppress_system_callback = False
+
+        # Recompute master toggle: set master to True if any child is True.
+        if hasattr(self, "system_toggle"):
+            new_master = any(v.get() for v in self.module_toggle_vars.values())
+            # Avoid triggering the master callback while setting it
+            self._suppress_system_callback = True
+            try:
+                self.system_toggle.set(new_master)
+            finally:
+                self._suppress_system_callback = False
+    
+        if hasattr(self, "update_datetime_controls"):
+            try:
+                self.update_datetime_controls()
+            except Exception:
+                pass
+    
+        # Finally request a redraw
+        self.update_display_immediately()
+
+
     def reset_config(self):
         """Reset configuration to defaults"""
         import tkinter.messagebox as msgbox
         if msgbox.askyesno("Reset Configuration", 
                           "Are you sure you want to reset all settings to defaults?"):
             self.config_manager.load_config_from_defaults()
+            self.refresh_module_buttons()
+            self.refresh_system_toggles()
             self.setup_draggable_elements()  # Refresh display
             self.update_display_immediately()
-            print("Configuration reset to defaults")
         
     def setup_primary_control_panel(self, parent):
         """Setup middle panel with main controls"""
         control_panel = tk.Frame(parent, bg="#1e1e1e")
         control_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20)
         
-        # No scrollbar needed - just stack sections vertically
         self.setup_custom_text_modern(control_panel)
         self.setup_datetime_modern(control_panel)
         self.setup_system_info_modern(control_panel)
@@ -725,8 +801,9 @@ class LCDController:
         config = self.config_manager.get_config()
         custom_config = config.get("custom", {})
         
-        toggle_var = tk.BooleanVar(value=custom_config.get("enabled", True))  # Default True like others
-        section = ModernSectionFrame(parent, "Custom Text", toggle_var)
+        self.toggle_custom = tk.BooleanVar(value=custom_config.get("enabled", True))
+        self.module_toggle_vars["custom"] = self.toggle_custom
+        section = ModernSectionFrame(parent, "Custom Text", self.toggle_custom)
         section.pack(fill=tk.X, pady=(0, 15))
         
         # Text input
@@ -735,7 +812,7 @@ class LCDController:
         
         tk.Label(input_frame, text="Text:", fg="#CCCCCC", bg="#2a2a2a").pack(anchor="w")
         
-        self.custom_text_var = tk.StringVar(value=custom_config.get("text", "Hello"))
+        self.custom_text_var = tk.StringVar(value=custom_config.get("text", ""))
         text_entry = tk.Entry(
             input_frame,
             textvariable=self.custom_text_var,
@@ -766,33 +843,39 @@ class LCDController:
     
         # Simple toggle handler like date/time
         def on_custom_toggle():
-            self.config_manager.update_config_value("custom.enabled", toggle_var.get())
+            self.config_manager.update_config_value("custom.enabled", self.toggle_custom.get())
             self.update_display_immediately()
     
         self.custom_text_var.trace_add("write", on_custom_text_change)
-        toggle_var.trace_add("write", lambda *args: on_custom_toggle())
+        self.toggle_custom.trace_add("write", lambda *args: on_custom_toggle())
 
     
     def setup_datetime_modern(self, parent):
-        """Modern date/time section"""
+        """Modern date/time section with independent toggles for date and time"""
         config = self.config_manager.get_config()
         
-        # Time section
+        # Outer section frame
+        section = tk.Frame(parent, bg="#2a2a2a")
+        section.pack(fill=tk.X, pady=(0, 15))
+        
+        # Title
+        tk.Label(section, text="Date / Time", fg="#FFFFFF", bg="#2a2a2a",
+                 font=("Arial", 14, "bold")).pack(anchor="w", pady=(5, 10))
+        
+        # --- Time controls ---
         time_config = config.get("time", {})
-        time_toggle = tk.BooleanVar(value=time_config.get("enabled", True))
-        time_section = ModernSectionFrame(parent, "Date/Time", time_toggle)
-        time_section.pack(fill=tk.X, pady=(0, 15))
-        
-        # Time format
-        time_frame = tk.Frame(time_section.content_frame, bg="#2a2a2a")
-        time_frame.pack(fill=tk.X, pady=5)
-        
-        tk.Label(time_frame, text="Time Format:", fg="#CCCCCC", bg="#2a2a2a").pack(anchor="w")
+        self.time_toggle = tk.BooleanVar(value=time_config.get("enabled", True))
+        time_row = tk.Frame(section, bg="#2a2a2a")
+        time_row.pack(fill=tk.X, pady=5)
+
+        time_toggle_btn = ModernToggleSwitch(time_row, self.time_toggle, bg="#2a2a2a")
+        time_toggle_btn.pack(side="left", padx=(0, 10))
+        tk.Label(time_row, text="Time", fg="#CCCCCC", bg="#2a2a2a").pack(side="left")
         
         self.time_format_var = tk.StringVar(value=time_config.get("format", "24h"))
         
-        format_frame = tk.Frame(time_frame, bg="#2a2a2a")
-        format_frame.pack(fill=tk.X, pady=(2, 0))
+        format_frame = tk.Frame(section, bg="#2a2a2a")
+        format_frame.pack(fill=tk.X, pady=(2, 5))
         
         tk.Radiobutton(format_frame, text="24 Hour", variable=self.time_format_var,
                       value="24h", fg="#CCCCCC", bg="#2a2a2a", selectcolor="#444444",
@@ -804,45 +887,54 @@ class LCDController:
                       activebackground="#2a2a2a", activeforeground="#FFFFFF",
                       command=self.on_time_format_change).pack(side="left")
         
-        # Date format
-        date_frame = tk.Frame(time_section.content_frame, bg="#2a2a2a")
-        date_frame.pack(fill=tk.X, pady=(10, 5))
+        # --- Date controls ---
+        date_config = config.get("date", {})
+        self.date_toggle = tk.BooleanVar(value=date_config.get("enabled", True))
+        date_row = tk.Frame(section, bg="#2a2a2a")
+        date_row.pack(fill=tk.X, pady=(10, 5))
         
-        tk.Label(date_frame, text="Date Format:", fg="#CCCCCC", bg="#2a2a2a").pack(anchor="w")
+        date_toggle_btn = ModernToggleSwitch(date_row, self.date_toggle, bg="#2a2a2a")
+        date_toggle_btn.pack(side="left", padx=(0, 10))
+        tk.Label(date_row, text="Date", fg="#CCCCCC", bg="#2a2a2a").pack(side="left")
         
-        self.date_format_var = tk.StringVar(value=config.get("date", {}).get("format", "%d-%m-%Y"))
-        date_entry = tk.Entry(date_frame, textvariable=self.date_format_var,
+        self.date_format_var = tk.StringVar(value=date_config.get("format", "%d-%m-%Y"))
+        date_entry = tk.Entry(date_row, textvariable=self.date_format_var,
                              bg="#444444", fg="#FFFFFF", relief="flat", font=("Arial", 10))
         date_entry.pack(fill=tk.X, pady=(2, 0), ipady=5)
         
-        # Date preview
-        self.date_preview = tk.Label(date_frame, text="", fg="#4CAF50", bg="#2a2a2a")
+        self.date_preview = tk.Label(date_row, text="", fg="#4CAF50", bg="#2a2a2a")
         self.date_preview.pack(anchor="w", pady=(2, 0))
         
-        # Bind events
-        def on_datetime_toggle():
-            enabled = time_toggle.get()
-            self.config_manager.update_config_value("time.enabled", enabled)
-            self.config_manager.update_config_value("date.enabled", enabled)
+        # --- Bind events ---
+        def on_time_toggle(*args):
+            self.config_manager.update_config_value("time.enabled", self.time_toggle.get())
+            self.update_display_immediately()
+
+        def on_date_toggle(*args):
+            self.config_manager.update_config_value("date.enabled", self.date_toggle.get())
             self.update_display_immediately()
         
+        self.time_toggle.trace_add("write", on_time_toggle)
+        self.module_toggle_vars["time"] = self.time_toggle
+        self.module_toggle_vars["date"] = self.date_toggle
+        self.date_toggle.trace_add("write", on_date_toggle)
         self.date_format_var.trace_add("write", self.on_date_format_change)
-        time_toggle.trace_add("write", lambda *args: on_datetime_toggle())
         
         self.update_date_preview()
     
+
     def setup_system_info_modern(self, parent):
         """Compact system info section with master toggle, CPU/GPU labels, and M1–M6 switches"""
         config = self.config_manager.get_config()
     
         # Master toggle
-        system_toggle = tk.BooleanVar(value=True)
-        section = ModernSectionFrame(parent, "System Info", system_toggle)
+        self.system_toggle = tk.BooleanVar(value=True)
+        section = ModernSectionFrame(parent, "System Info", self.system_toggle)
         section.pack(fill=tk.X, pady=(0, 15))
     
         # Track toggle vars
+        if not hasattr(self, 'module_toggle_vars'):
         self.module_toggle_vars = {}
-    
         def add_toggle(frame, tag, default_enabled=True):
             """Helper to add a toggle for cpu_label, gpu_label, or M1–M6"""
             conf = config.get(tag, {})
@@ -865,7 +957,7 @@ class LCDController:
             """Flip all children when master toggled by user"""
             if getattr(self, "_suppress_system_callback", False):
                 return
-            enabled = system_toggle.get()
+            enabled = self.system_toggle.get()
             self._suppress_child_callback = True
             try:
                 for name, var in self.module_toggle_vars.items():
@@ -885,7 +977,7 @@ class LCDController:
             if new_master != system_toggle.get():
                 self._suppress_system_callback = True
                 try:
-                    system_toggle.set(new_master)
+                    self.system_toggle.set(new_master)
                 finally:
                     self._suppress_system_callback = False
             self.update_display_immediately()
@@ -905,12 +997,12 @@ class LCDController:
             add_toggle(gpu_row, f"M{i}")
     
         # Hook up master toggle
-        system_toggle.trace_add("write", on_system_toggle)
+        self.system_toggle.trace_add("write", on_system_toggle)
     
         # Sync master to initial child state
         self._suppress_system_callback = True
         try:
-            system_toggle.set(any(v.get() for v in self.module_toggle_vars.values()))
+            self.system_toggle.set(any(v.get() for v in self.module_toggle_vars.values()))
         finally:
             self._suppress_system_callback = False
 
@@ -1145,11 +1237,8 @@ class LCDController:
             if tag in ("cpu_label", "gpu_label", "custom"):
                 conf["text"] = item.text
 
-    
         # At this point _config is fully up to date in memory
 
-
-    
     def on_canvas_press(self, event):
         self.dragging_item = None
         config = self.config_manager.get_config()
@@ -1170,7 +1259,6 @@ class LCDController:
             
             # Move item but DON'T update LCD during drag
             self.dragging_item.move(dx, dy, update_lcd=False)
-            
             self.drag_start_x = event.x
             self.drag_start_y = event.y
             
@@ -1184,7 +1272,6 @@ class LCDController:
             # Save final position
             self.config_manager.update_config_value(f"{tag}.x", int(self.dragging_item.x))
             self.config_manager.update_config_value(f"{tag}.y", int(self.dragging_item.y))
-            
             self.dragging_item.dragging = False
             
             # NOW update the LCD device with final position
@@ -1205,7 +1292,6 @@ class LCDController:
                 img = Image.new("RGB", (320, 240), "black")
             draw = ImageDraw.Draw(img)
 
-            
             # Draw all visible items
             for tag, item in self.draggable_items.items():
                 if self.is_item_visible(tag, config):
@@ -1376,10 +1462,9 @@ class LCDController:
         self.lcd_canvas.delete("lcd_image")
         self.lcd_canvas.create_image(0, 0, image=self.tk_lcd_image, anchor="nw", tags="lcd_image")
 
-    
     def save_config(self):
         self.config_manager.save_config(self.config_file)
-        print(f"Configuration saved to {self.config_file}")
+        #print(f"Configuration saved to {self.config_file}")
         
     def update_display_immediately(self):
         """Request a display update in the background thread."""
@@ -1419,7 +1504,6 @@ class LCDController:
     def save_config(self):
         self.sync_items_to_config()
         self.config_manager.save_config(self.config_file)
-        print(f"Configuration saved to {self.config_file}")
 
     def on_visibility_change(self, event):
         """Called when window visibility changes"""

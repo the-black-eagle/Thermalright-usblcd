@@ -1777,19 +1777,19 @@ void ConfigManager::addDefaultModules()
                  {"y", 140}};
 
   // M2 - CPU Frequency
-  _data["M2"] = {{"metric", "cpu_freq"},
-                 {"enabled", true},
-                 {"font", {{"family", "DejaVu Sans"}, {"size", 20}, {"style", "bold"}}},
-                 {"color", "#FF6B35"},
-                 {"x", 195},
-                 {"y", 140}};
-
-  // M3 - CPU Percentage
-  _data["M3"] = {{"metric", "cpu_percent"},
+  _data["M2"] = {{"metric", "cpu_percent"},
                  {"enabled", true},
                  {"font", {{"family", "DejaVu Sans"}, {"size", 20}, {"style", "bold"}}},
                  {"color", "#FF6B35"},
                  {"x", 135},
+                 {"y", 140}};
+
+  // M3 - CPU Percentage
+  _data["M3"] = {{"metric", "cpu_freq"},
+                 {"enabled", true},
+                 {"font", {{"family", "DejaVu Sans"}, {"size", 20}, {"style", "bold"}}},
+                 {"color", "#FF6B35"},
+                 {"x", 195},
                  {"y", 140}};
 
   // M4 - GPU Temperature
@@ -1801,19 +1801,19 @@ void ConfigManager::addDefaultModules()
                  {"y", 180}};
 
   // M5 - GPU Clock
-  _data["M5"] = {{"metric", "gpu_clock"},
-                 {"enabled", true},
-                 {"font", {{"family", "DejaVu Sans"}, {"size", 20}, {"style", "bold"}}},
-                 {"color", "#35A7FF"},
-                 {"x", 195},
-                 {"y", 180}};
-
-  // M6 - GPU Usage
-  _data["M6"] = {{"metric", "gpu_usage"},
+  _data["M5"] = {{"metric", "gpu_usage"},
                  {"enabled", true},
                  {"font", {{"family", "DejaVu Sans"}, {"size", 20}, {"style", "bold"}}},
                  {"color", "#35A7FF"},
                  {"x", 135},
+                 {"y", 180}};
+
+  // M6 - GPU Usage
+  _data["M6"] = {{"metric", "gpu_clock"},
+                 {"enabled", true},
+                 {"font", {{"family", "DejaVu Sans"}, {"size", 20}, {"style", "bold"}}},
+                 {"color", "#35A7FF"},
+                 {"x", 195},
                  {"y", 180}};
 }
 
