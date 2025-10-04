@@ -1,4 +1,4 @@
- # Copyright 2005 Gary Moore (g.moore(AT)gmx.co.uk)
+# Copyright 2005 Gary Moore (g.moore(AT)gmx.co.uk)
 
    # Licensed under the Apache License, Version 2.0 (the "License");
    # you may not use this file except in compliance with the License.
@@ -334,6 +334,33 @@ class DraggableTextPillow:
         if self.update_callback:
             self.update_callback()
 
+    def _centre_window(self, window, parent=None):
+        """Centre a window on its parent or screen"""
+        window.update_idletasks()
+
+        # Get window dimensions
+        window_width = window.winfo_width()
+        window_height = window.winfo_height()
+
+        # If parent exists, centre on parent
+        if parent:
+            parent_x = parent.winfo_rootx()
+            parent_y = parent.winfo_rooty()
+            parent_width = parent.winfo_width()
+            parent_height = parent.winfo_height()
+
+            x = parent_x + (parent_width - window_width) // 2
+            y = parent_y + (parent_height - window_height) // 2
+        else:
+            # Centre on screen
+            screen_width = window.winfo_screenwidth()
+            screen_height = window.winfo_screenheight()
+
+            x = (screen_width - window_width) // 2
+            y = (screen_height - window_height) // 2
+
+        window.geometry(f"+{x}+{y}")
+
     def open_style_editor(self, parent=None):
         popup = tk.Toplevel(parent or self.canvas)
         popup.title(f"Edit Style: {self.tag}")
@@ -415,7 +442,15 @@ class DraggableTextPillow:
         popup.bind("<Control-c>", lambda e: popup.destroy())
         popup.bind("<Control-o>", lambda e: reset_to_default())
 
-        popup.after(10, popup.grab_set)  # grab once window is viewable
+        # Make modal and centre
+        popup.transient(parent)
+        self._centre_window(popup, parent)
+        popup.update_idletasks()
+        try:
+            popup.grab_set()
+        except Exception:
+            # If grab fails (e.g., another modal is active), continue anyway
+            pass
         popup.wait_window()
 
 class ModernToggleSwitch(tk.Canvas):
@@ -563,6 +598,7 @@ class LCDController:
         self.frame_times = deque(maxlen=60)
         self._frame_counter = 0
         self.is_obscured = False
+        self.gui_should_update = True
 
         self.bg_manager = lcd_driver.get_background_manager()
 
@@ -756,6 +792,33 @@ class LCDController:
             self.refresh_system_toggles()
             self.setup_draggable_elements()  # Refresh display
             self.update_display_immediately()
+
+    def _centre_window(self, window, parent=None):
+        """Centre a window on its parent or screen"""
+        window.update_idletasks()
+
+        # Get window dimensions
+        window_width = window.winfo_width()
+        window_height = window.winfo_height()
+
+        # If parent exists, centre on parent
+        if parent:
+            parent_x = parent.winfo_rootx()
+            parent_y = parent.winfo_rooty()
+            parent_width = parent.winfo_width()
+            parent_height = parent.winfo_height()
+
+            x = parent_x + (parent_width - window_width) // 2
+            y = parent_y + (parent_height - window_height) // 2
+        else:
+            # Centre on screen
+            screen_width = window.winfo_screenwidth()
+            screen_height = window.winfo_screenheight()
+
+            x = (screen_width - window_width) // 2
+            y = (screen_height - window_height) // 2
+
+        window.geometry(f"+{x}+{y}")
 
     def setup_primary_control_panel(self, parent):
         """Setup middle panel with main controls"""
@@ -974,7 +1037,7 @@ class LCDController:
             self.on_module_toggle(name)
             # Master ON if any child ON, OFF if all children OFF
             new_master = any(v.get() for v in self.module_toggle_vars.values())
-            if new_master != system_toggle.get():
+            if new_master != self.system_toggle.get():
                 self._suppress_system_callback = True
                 try:
                     self.system_toggle.set(new_master)
@@ -1114,6 +1177,9 @@ class LCDController:
         popup.title(f"Select metric for {module_name}")
         popup.configure(bg="#2b2b2b")
 
+        # Make transient (grab_set will be called at the end)
+        popup.transient(self.root)
+
         metrics = self.info_poller.get_available_metrics()
 
         listbox = tk.Listbox(popup, bg="#333", fg="white", selectbackground="#4CAF50")
@@ -1136,6 +1202,15 @@ class LCDController:
                   bg="green", fg="white").pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="✗ Cancel", command=popup.destroy,
                   bg="red", fg="white").pack(side=tk.LEFT, padx=5)
+
+        # Centre and make modal after window is ready
+        self._centre_window(popup, self.root)
+        popup.update_idletasks()
+        try:
+            popup.grab_set()
+        except Exception:
+            # If grab fails (e.g., another modal is active), continue anyway
+            pass
 
     def setup_draggable_elements(self):
         config = self.config_manager.get_config()
