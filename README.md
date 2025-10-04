@@ -94,3 +94,16 @@ lcd-sysmon/
 - Advanced minimize detection under GNOME (Xlib `_NET_WM_STATE_HIDDEN`).
 
 Further dcumentation can be found in the `docs` directory.
+
+
+## 🖥️ Screenshots
+
+![Main UI](docs/screenshots/screenshot1.png)
+
+![With background image](docs/screenshots/screenshot2.png)
+
+![Playing a video](docs/screenshots/screenshot3.png)
+
+![Displaying different metrics](docs/screenshots/screenshot4.png)
+
+![Editing text attributes](docs/screenshots/screenshot5.png)
