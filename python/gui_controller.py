@@ -1553,7 +1553,6 @@ class LCDController:
 
 
     def _update_worker(self):
-        print("[worker] Update worker thread started")
         while True:
             self._update_queue.get()
             try:
@@ -1698,9 +1697,7 @@ class LCDController:
         """Called when window is unmapped (hidden/minimized)"""
         # Compare widget string representation - root is typically "."
         widget_str = str(event.widget)
-        print(f"[on_unmap] widget_str='{widget_str}'")
         if widget_str == ".":
-            print("[on_unmap] Setting is_mapped=False, is_minimized=True")
             self.is_mapped = False
             self.is_minimized = True
 
