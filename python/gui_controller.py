@@ -1553,21 +1553,25 @@ class LCDController:
 
 
     def _update_worker(self):
+        print("[worker] Update worker thread started")
         while True:
             self._update_queue.get()
             try:
                 start = time.perf_counter()
 
                 img = self.render_lcd_image()  # heavy (PIL + USB)
-                # Only schedule the Tk preview update if the window is visible.
-                # When minimized (root.state() == "iconic") we skip GUI/X updates entirely.
+
+                # Only schedule the Tk preview update if GUI should be updating
                 try:
-                    if getattr(self, "root", None) is not None and self.root.state() != "iconic":
+                    should_update = getattr(self, "gui_should_update", True)
+
+                    if getattr(self, "root", None) is not None and should_update:
                         self.root.after(0, lambda i=img: self.draw_preview(i))  # GUI-safe
-                        # else: minimized — skip the GUI preview update to avoid ImageTk/X traffic
+                    # else: window not focused/minimized, skip GUI update to save resources
                 except Exception as e:
-                    # If something odd happens querying state, still avoid crashing the worker
+                    # If something odd happens, still avoid crashing the worker
                     print(f"[worker] preview scheduling skipped due to: {e}")
+
                 end = time.perf_counter()
                 self.frame_times.append(end)
                 self._frame_counter += 1
@@ -1580,14 +1584,18 @@ class LCDController:
         self.sync_items_to_config()
         self.config_manager.save_config(self.config_file)
 
-    def on_visibility_change(self, event):
-        """Called when window visibility changes"""
-        self.is_obscured = (event.state == 'VisibilityFullyObscured')
-
-
     def start_data_updates(self):
         self.is_obscured = False
+        self.is_minimized = False
+        self.has_focus = True
+        self.is_mapped = True
+
+        # Bind multiple state detection events
         self.root.bind('<Visibility>', self.on_visibility_change)
+        self.root.bind('<FocusIn>', self.on_focus_in)
+        self.root.bind('<FocusOut>', self.on_focus_out)
+        self.root.bind('<Map>', self.on_map)
+        self.root.bind('<Unmap>', self.on_unmap)
 
         # Start the LCD update timer (always 40ms)
         def lcd_update():
@@ -1601,41 +1609,102 @@ class LCDController:
             self.root.after(40, lcd_update)
 
         previous_interval = None
-        last_slow_time = 0  # Track when we last went to slow polling
+        last_slow_time = 0  # Track when we last went to slow refresh
+        first_poll = True  # Flag for first poll
 
         def gui_poll():
-            nonlocal previous_interval, last_slow_time
+            nonlocal previous_interval, last_slow_time, first_poll
             try:
+                # Check focus
                 focus_result = self.root.tk.call("focus")
                 name = str(focus_result) if focus_result else "None"
                 current_time = time.time()
-                match name:
-                    case "None":
-                        interval = 200   # unfocused window
-                        last_slow_time = current_time
-                    case name if name.startswith(".__tk_"):
-                        interval = 200   # filedialog or transient
-                        last_slow_time = current_time
-                    case _:
-                        # If we recently switched to slow polling, stay slow for a bit
-                        if current_time - last_slow_time < 2.0:  # 2 second grace period
-                            interval = 200
-                        else:
-                            interval = 40
+
+                # On first poll, assume window is visible and focused
+                if first_poll:
+                    first_poll = False
+                    interval = 40
+                    self.gui_should_update = True
+                # Determine if we should use slow or fast polling and whether to update GUI
+                elif self.is_obscured:
+                    # Window is fully obscured
+                    interval = 200
+                    self.gui_should_update = False
+                    last_slow_time = current_time
+                elif name == "None":
+                    interval = 200  # Unfocused/minimized window
+                    self.gui_should_update = False
+                    last_slow_time = current_time
+                elif name.startswith(".__tk_"):
+                    interval = 200  # Filedialog or transient
+                    self.gui_should_update = True  # Keep updating for dialogs
+                    last_slow_time = current_time
+                else:
+                    # If we recently switched to slow polling, stay slow for a bit
+                    if current_time - last_slow_time < 2.0:  # 2 second grace period
+                        interval = 200
+                        self.gui_should_update = False
+                    else:
+                        interval = 40
+                        self.gui_should_update = True
             except Exception as e:
                 interval = 200
-                print(f"Exception: {e}, set interval to 200")
+                self.gui_should_update = False
+                print(f"Exception in gui_poll: {e}")
 
             if interval != previous_interval:
                 previous_interval = interval
-                
+
             self.root.after(interval, gui_poll)
 
         # Start both timers
         lcd_update()
         gui_poll()
 
-# Usage
+    def on_visibility_change(self, event):
+        """Called when window visibility changes"""
+        # VisibilityUnobscured = 0, VisibilityPartiallyObscured = 1, VisibilityFullyObscured = 2
+        if hasattr(event, 'state'):
+            if event.state == 'VisibilityFullyObscured':
+                self.is_obscured = True
+            else:
+                self.is_obscured = False
+        else:
+            # Fallback: check the string representation
+            self.is_obscured = (str(event.state) == 'VisibilityFullyObscured')
+
+    def on_focus_in(self, event):
+        """Called when window gains focus"""
+        # Only set focus if the event is for the root window
+        if event.widget == self.root:
+            self.has_focus = True
+
+    def on_focus_out(self, event):
+        """Called when window loses focus"""
+        # Only clear focus if the event is for the root window
+        if event.widget == self.root:
+            self.has_focus = False
+
+    def on_map(self, event):
+        """Called when window is mapped (shown)"""
+        # Compare widget string representation - root is typically "."
+        widget_str = str(event.widget)
+        if widget_str == ".":
+            print("[on_map] Setting is_mapped=True, is_minimized=False")
+            self.is_mapped = True
+            self.is_minimized = False
+
+    def on_unmap(self, event):
+        """Called when window is unmapped (hidden/minimized)"""
+        # Compare widget string representation - root is typically "."
+        widget_str = str(event.widget)
+        print(f"[on_unmap] widget_str='{widget_str}'")
+        if widget_str == ".":
+            print("[on_unmap] Setting is_mapped=False, is_minimized=True")
+            self.is_mapped = False
+            self.is_minimized = True
+
+
 if __name__ == "__main__":
 
     if not lcd_driver.init_dev():
