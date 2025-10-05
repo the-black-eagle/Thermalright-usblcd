@@ -1,4 +1,4 @@
-# Copyright 2005 Gary Moore (g.moore(AT)gmx.co.uk)
+# Copyright 2025 the-black-eagle (18698554+the-black-eagle@users.noreply.github.com)
 
    # Licensed under the Apache License, Version 2.0 (the "License");
    # you may not use this file except in compliance with the License.
@@ -614,6 +614,16 @@ class LCDController:
         self.root.title("Linux USB LCD Controller")
         self.root.configure(bg="#1e1e1e")
         self.root.minsize(1200, 600)
+        # Set window icon (if icon file exists)
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "tr-driver.png")
+            if os.path.exists(icon_path):
+                icon_img = Image.open(icon_path)
+                icon_photo = ImageTk.PhotoImage(icon_img)
+                self.root.iconphoto(True, icon_photo)
+        except Exception as e:
+            print(f"Could not set window icon: {e}")
+
 
         # Configure style
         self.setup_styles()
@@ -1539,7 +1549,6 @@ class LCDController:
 
     def save_config(self):
         self.config_manager.save_config(self.config_file)
-        #print(f"Configuration saved to {self.config_file}")
 
     def update_display_immediately(self):
         """Request a display update in the background thread."""
@@ -1569,8 +1578,7 @@ class LCDController:
                     # else: window not focused/minimized, skip GUI update to save resources
                 except Exception as e:
                     # If something odd happens, still avoid crashing the worker
-                    print(f"[worker] preview scheduling skipped due to: {e}")
-
+                        pass
                 end = time.perf_counter()
                 self.frame_times.append(end)
                 self._frame_counter += 1
@@ -1689,7 +1697,6 @@ class LCDController:
         # Compare widget string representation - root is typically "."
         widget_str = str(event.widget)
         if widget_str == ".":
-            print("[on_map] Setting is_mapped=True, is_minimized=False")
             self.is_mapped = True
             self.is_minimized = False
 
