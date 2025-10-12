@@ -1,36 +1,26 @@
 cmake_minimum_required(VERSION 3.16)
-project(lcd_driver LANGUAGES CXX)
+project(tr_driver LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include(FetchContent)
-
-# --- pybind11
-FetchContent_Declare(
-    pybind11
-    GIT_REPOSITORY https://github.com/pybind/pybind11.git
-    GIT_TAG v2.12.0
-)
-FetchContent_MakeAvailable(pybind11)
-
-# --- nlohmann/json
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-)
-FetchContent_MakeAvailable(nlohmann_json)
-
+# --- Dependencies
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
+find_package(pybind11 REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(PYTHON_DIR ${CMAKE_SOURCE_DIR}/python)
+set(DATA_DIR ${CMAKE_SOURCE_DIR}/USBLCD)
+set(APP_NAME tr-driver)
+set(APP_ICON ${CMAKE_SOURCE_DIR}/${APP_NAME}.png)
+set(APP_DESKTOP ${CMAKE_SOURCE_DIR}/cmake/write_desktop.cmake)
+set(APP_RUN ${CMAKE_SOURCE_DIR}/cmake/AppRun.in)
 
-# --- Build backend module
+# --- Backend module
 pybind11_add_module(lcd_driver
     ${SRC_DIR}/CLcdDriver.cpp
     ${SRC_DIR}/bindings.cpp
@@ -48,53 +38,114 @@ target_link_libraries(lcd_driver PRIVATE
     nlohmann_json::nlohmann_json
 )
 
-# --- Install the Python frontend (used for local testing)
-configure_file(
-    ${PYTHON_DIR}/gui_controller.py
-    ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
-    COPYONLY
+# Install the compiled backend
+install(TARGETS lcd_driver LIBRARY DESTINATION lib)
+
+# Install Python modules
+install(PROGRAMS ${PYTHON_DIR}/gui_controller.py DESTINATION lib/tr-driver RENAME tr-driver)
+install(FILES ${PYTHON_DIR}/background_selector.py DESTINATION lib/tr-driver)
+
+# Install data files (themes and videos)
+install(DIRECTORY ${DATA_DIR}/
+        DESTINATION share/tr-driver/USBLCD
+        FILES_MATCHING 
+        PATTERN "*.png"
+        PATTERN "*.mp4"
+        PATTERN "*.avi"
+        PATTERN "*.mov"
+        PATTERN "*.mkv"
+        PATTERN "*.json")
+
+# Add a small system-wide launcher
+install(CODE "
+file(WRITE \"\${CMAKE_INSTALL_PREFIX}/bin/tr-driver\" 
+\"#!/usr/bin/env bash\\nexec python3 /lib/tr-driver/tr-driver \\\"\\$@\\\"\\n\")
+file(CHMOD \"\${CMAKE_INSTALL_PREFIX}/bin/tr-driver\" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+")
+
+# Desktop entry
+install(CODE "
+file(WRITE \"\${CMAKE_INSTALL_PREFIX}/share/applications/tr-driver.desktop\" 
+\"[Desktop Entry]\\nType=Application\\nName=LCD System Monitor\\nExec=tr-driver\\nIcon=tr-driver\\nTerminal=false\\nCategories=Utility;System;\\n\")
+")
+
+# Icon
+install(FILES ${APP_ICON} DESTINATION share/icons/hicolor/256x256/apps)
+
+
+# ===============================================================
+# Custom Targets
+# ===============================================================
+
+# --- 1️⃣ driver: build only the C++ backend
+add_custom_target(driver
+    DEPENDS lcd_driver
+    COMMENT "Building C++ backend only (lcd_driver.so)"
 )
 
-# --- Custom target: build AppImage
-add_custom_target(appimage ALL
-    COMMENT "Packaging LCD Controller into AppImage"
-)
-
-add_custom_command(TARGET appimage POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E echo "Building AppImage..."
-
-    # Prepare directories
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps
-
-    # Copy files
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/gui_controller.py
-    # Find the built Python extension (.so)
-    COMMAND ${CMAKE_COMMAND} -E echo "Locating built lcd_driver module..."
-    COMMAND ${CMAKE_COMMAND} -DSEARCH_DIR=${CMAKE_CURRENT_BINARY_DIR} -DDEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin -P ${CMAKE_SOURCE_DIR}/cmake/copy_driver.cmake
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tr-driver.png ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps/tr-driver.png
-    # Write .desktop file using CMake script mode
-    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications/tr-driver.desktop
-                             -P ${CMAKE_SOURCE_DIR}/cmake/write_desktop.cmake
-
-    # Bundle Python using PyInstaller
-    COMMAND ${Python3_EXECUTABLE} -m pip install pyinstaller --upgrade
-    COMMAND ${Python3_EXECUTABLE} -m PyInstaller --onefile --name gui_controller --hidden-import=PIL._tkinter_finder --hidden-import=PIL._imagingtk --hidden-import=PIL.ImageTk
-    ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
-    # Copy the binary into AppDir
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/dist/gui_controller ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/gui_controller
-
-    # Build the AppImage
-    COMMAND appimagetool ${CMAKE_CURRENT_BINARY_DIR}/AppDir ${CMAKE_CURRENT_BINARY_DIR}/LCD_Controller-x86_64.AppImage
-
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-# --- Run target for local testing
-add_custom_target(run
+# --- 2️⃣ test: build backend, copy Python GUI, and run
+add_custom_target(lcd_test
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/background_selector.py ${CMAKE_CURRENT_BINARY_DIR}/background_selector.py
+    
+    # Create symlink to USBLCD in build directory for development
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/USBLCD
+    
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
     DEPENDS lcd_driver
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "Running LCD GUI controller..."
+    COMMENT "Running LCD GUI with built backend..."
+    EXCLUDE_FROM_ALL
+)
+
+# --- 3️⃣ appimage: build and package AppImage
+add_custom_target(appimage
+    COMMENT "Building ${APP_NAME}.AppImage..."
+)
+
+add_custom_command(TARGET appimage POST_BUILD
+    # Ensure driver is built first
+    COMMAND ${CMAKE_COMMAND} -E echo "Locating built lcd_driver module..."
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/lib
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/tr-driver
+
+    # Copy Python modules + backend
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/lcd_driver*.so ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/lib/
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/gui_controller.py
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/background_selector.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/background_selector.py
+
+    # Copy USBLCD data directory
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/tr-driver/USBLCD
+
+    # Copy desktop + icon
+    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications/${APP_NAME}.desktop -P ${APP_DESKTOP}
+    COMMAND ${CMAKE_COMMAND} -E copy ${APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png
+    COMMAND ${CMAKE_COMMAND} -E copy ${APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/${APP_NAME}.png
+    COMMAND ${CMAKE_COMMAND} -E copy ${APP_RUN} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/AppRun
+    COMMAND chmod +x ${CMAKE_CURRENT_BINARY_DIR}/AppDir/AppRun
+
+    # Bundle Python using PyInstaller
+    COMMAND ${Python3_EXECUTABLE} -m pip install pyinstaller --upgrade
+    COMMAND ${Python3_EXECUTABLE} -m PyInstaller --onefile --name ${APP_NAME} --icon=${APP_ICON} 
+            --add-data "${DATA_DIR}:USBLCD"
+            --hidden-import=PIL._tkinter_finder --hidden-import=PIL._imagingtk --hidden-import=PIL.ImageTk 
+            ${CMAKE_SOURCE_DIR}/python/gui_controller.py
+
+    # Copy frozen binary to AppDir
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/dist/${APP_NAME} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/${APP_NAME}
+
+    # Build final AppImage
+    COMMAND appimagetool ${CMAKE_CURRENT_BINARY_DIR}/AppDir ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}-x86_64.AppImage
+    EXCLUDE_FROM_ALL
+)
+add_dependencies(appimage lcd_driver)
+
+# --- 4️⃣ deb: prepare staging area for Debian package
+add_custom_target(deb
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${CMAKE_BINARY_DIR}/debian/${APP_NAME}/usr
+    COMMENT "Installing project into debian/${APP_NAME} staging directory for packaging..."
+    EXCLUDE_FROM_ALL
 )
