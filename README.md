@@ -4,61 +4,83 @@
 [![Latest Release](https://img.shields.io/github/v/release/the-black-eagle/Thermalright-usblcd?label=Latest%20AppImage&logo=github)](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest)
 [![License](https://img.shields.io/github/license/the-black-eagle/Thermalright-usblcd)](LICENSE)
 
+Native Linux driver and GUI for the Thermalright USB LCD system monitor. Display real-time system stats, custom images, and videos on your Thermalright LCD panel.
+
 ---
 
-### 🧱 Build Status & Releases
+## ✨ Features
 
-- **Build AppImage:** Shows the current CI build status for the latest tagged release.  
-- **Latest AppImage:** Links directly to the most recent prebuilt AppImage binary.  
-- **License:** Indicates the open-source license for this project.  
+- 🖼️ **440 static themes** + **596 video backgrounds** included
+- 📊 **Real-time system monitoring** - CPU, GPU, RAM, temps, network stats
+- 🎨 **Alpha channel support** - Videos play through transparent image areas
+- 🕐 **Customizable date/time** formatting with multi-line support (`\n`)
+- 💾 **System tray mode** - Minimize to background, keeps LCD updated
+- 🐧 **Pure Linux native** - No Wine, no Windows dependencies
+- ⚡ **AppImage available** - Download and run, no installation needed
 
-These badges update automatically when a new tag is pushed or a release is published, ensuring the README always reflects the latest build and release state.
+---
 
-### ⚡ Quick Install
+## ⚠️ Hardware Compatibility
 
-You can download the latest AppImage directly from the [**Releases**](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest) page.
+**This driver ONLY works with:**
+- **Vendor ID:** `0x0402` (ALi Corp)
+- **Product ID:** `0x3922`
+- **Device Name:** ALi Corp. USBLCD
 
+### Check if you have compatible hardware:
 ```bash
-wget https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest/download/tr-driver-x86_64.AppImage
-chmod +x tr-driver-x86_64.AppImage
-./tr-driver-x86_64.AppImage
+lsusb | grep "0402:3922"
 ```
 
+If you see output like `Bus 001 Device 005: ID 0402:3922 ALi Corp. USBLCD`, you're good to go!  
+If not, this driver won't work with your device.
 
-That’s it — no installation required!
-The AppImage bundles all dependencies, so it runs on most modern Linux distributions. It includes 440 static images and 596 video files.
+> **Note:** Thermalright has no plans to provide official Linux drivers. This is a community-built alternative that replicates the Windows software functionality.
 
-### ⚙️ Driver Overview
+---
 
-This driver is specifically for the Thermalright LCD that idetifies itself as **ALi Corp. USBLCD** and has vid of 0402 and a pid of 3922.  It will not drive any other
-Thermalright LCD's.  Thermalright have no intentions of providing a Linux driver (because I asked them) so I did it myself.  The result is as close to the original as I could get.  The program can display static or video images oon the LCD.  If you use static images with transparency (alpha channel) and then load a video, the video will play in the alpha channel of the image.
+## ⚡ Quick Install (AppImage)
 
-Date and time formatting follows standard %y-%m formatting etc but can include `\n` for new lines which is used in some of the provided images to stack the day on top of the date.
+Download the latest pre-built AppImage from the [**Releases**](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest) page.
 
-Most of the preview images have been edited from the originals supplied by ThermalRight to better fit Linux and this project, although some do still contain the Vendor name and some chinese text.  This is only in the media selector though, the actual loaded image will not contain that.
-Videos have been copied `as is` from the vendor website.  Their original downloads them on demand.  Images, videos and the config files for the images can be found in the **USBLCD** directory.
+```bash
+# Download latest AppImage (replace version number with current release)
+wget https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest/download/tr-driver-1.1.0-2-x86_64.AppImage
 
-Program can be sent to the systray by clicking the close box and will continue to run in the background.  The GUI will not be updated in this case, just your LCD.
+# Make it executable
+chmod +x tr-driver-*.AppImage
 
-This project is a work in progress but it is stable enough now to be used with one caveat - I have not yet figured out how to interrupt the start-up animation, so
-users need to wait for the LCD to time out ~1 minute.  There is some code in the driver to do the initial handshake but it's not in a working state yet.  If the driver loses comms with the LCD for some reason (shouldn't happen but just in case), it will bring itself to the front and notify you with a message box.  Once the LCD has stopped playing it's start-up animation, click OK to resume things.  In practice, this is unlikely to happen though.
+# Run it
+./tr-driver-*.AppImage
+```
 
-### Please Note
+That's it — no installation required! The AppImage bundles all dependencies and works on most modern Linux distributions.
 
-I am unable to test the nVidia or Intel stuff, so although I *think* it should work, it's totally untested!!
+### Automatic download of latest version:
+```bash
+# Automatically fetch the latest AppImage URL
+wget $(curl -s https://api.github.com/repos/the-black-eagle/Thermalright-usblcd/releases/latest | grep "browser_download_url.*AppImage" | cut -d '"' -f 4)
+chmod +x tr-driver-*.AppImage
+./tr-driver-*.AppImage
+```
 
-- ✅ Native Linux replacement for the original closed-source Windows tool.  
-- ✅ Backend in C++ (handles device comms, config, frame uploads).  
-- ✅ Python GUI frontend for preview/testing (swappable for other UIs).  
-- ✅ Config stored in JSON, managed by the backend.  
+---
+
+## 🧱 Build Status & Releases
+
+- **Build AppImage:** Shows the current CI build status for the latest tagged release
+- **Latest AppImage:** Links directly to the most recent prebuilt AppImage binary
+- **License:** Indicates the open-source license for this project
+
+These badges update automatically when a new tag is pushed or a release is published.
 
 ---
 
 ## ⚙️ Requirements
 
 ### System
-- Linux (tested on Ubuntu 24.04, GNOME/Mutter)  
-- USB access to the LCD device  
+- Linux (tested on Ubuntu 24.04, GNOME/Mutter)
+- USB access to the LCD device (see Troubleshooting for permissions)
 
 ### Build Dependencies
 
@@ -67,11 +89,17 @@ I am unable to test the nVidia or Intel stuff, so although I *think* it should w
 | **g++ / clang++** | Build C++17 code | `sudo apt install g++` | [GCC](https://gcc.gnu.org/) |
 | **CMake ≥ 3.16** | Build system | `sudo apt install cmake` | [CMake](https://cmake.org/download/) |
 | **libusb-1.0** | USB device access | `sudo apt install libusb-1.0-0-dev` | [libusb](https://libusb.info/) |
-| **Python 3.12+** | Frontend GUI | `sudo apt install python3 python3-dev python3-pip` | [Python](https://www.python.org/) |
-| **pybind11** | Python bindings | `pip install pybind11` | [pybind11](https://github.com/pybind/pybind11) |
-| **pybind11_json** | JSON conversion | `pip install pybind11_json` | [pybind11_json](https://github.com/pybind/pybind11_json) |
+| **Python 3.10+** | Frontend GUI | `sudo apt install python3 python3-dev python3-pip` | [Python](https://www.python.org/) |
+| **pybind11** | Python bindings | `sudo apt install pybind11-dev` | [pybind11](https://github.com/pybind/pybind11) |
+| **pybind11_json** | JSON conversion | [Download header](https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp) to `/usr/local/include/` | [pybind11_json](https://github.com/pybind/pybind11_json) |
 | **nlohmann/json** | JSON handling (C++) | `sudo apt install nlohmann-json3-dev` | [nlohmann/json](https://github.com/nlohmann/json) |
 | **OpenCV** | Image/frame processing | `sudo apt install libopencv-dev` | [OpenCV](https://opencv.org/) |
+
+### Install pybind11_json (header-only):
+```bash
+sudo wget -O /usr/local/include/pybind11_json.hpp \
+  https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp
+```
 
 ---
 
@@ -79,25 +107,36 @@ I am unable to test the nVidia or Intel stuff, so although I *think* it should w
 
 ### Quick start (one-liner)
 ```bash
-git clone https://github.com/yourname/lcd-sysmon.git
-cd lcd-sysmon
+git clone https://github.com/the-black-eagle/Thermalright-usblcd.git
+cd Thermalright-usblcd
 mkdir build && cd build
 cmake ..
-make run
+make lcd_test
 ```
 
-👉 `make run` will **build** the backend and **launch** the Python GUI in one step.  
+👉 `make lcd_test` will **build** the backend and **launch** the Python GUI in one step.
 
 ---
 
 ### Step-by-step (if you prefer)
 ```bash
-git clone https://github.com/yourname/lcd-sysmon.git
-cd lcd-sysmon
+git clone https://github.com/the-black-eagle/Thermalright-usblcd.git
+cd Thermalright-usblcd
 mkdir build && cd build
 cmake ..
-make             # builds the driver + copies gui_controller.py
-python3 gui_controller.py
+make lcd_driver              # Build C++ backend only
+python3 ../python/gui_controller.py
+```
+
+---
+
+## 🎯 Build Targets
+
+```bash
+make lcd_driver    # Build C++ backend module only
+make lcd_test      # Build backend + run GUI for testing
+make appimage      # Package as portable AppImage
+make deb           # Prepare Debian package staging directory
 ```
 
 ---
@@ -105,16 +144,27 @@ python3 gui_controller.py
 ## 📂 Project Structure
 
 ```
-lcd-sysmon/
+Thermalright-usblcd/
 ├── src/
-│   ├── CLcdDriver.cpp
-│   ├── CLcdDriver.h
-│   └── bindings.cpp
+│   ├── CLcdDriver.cpp       # Main driver implementation
+│   ├── CLcdDriver.h         # Driver header
+│   └── bindings.cpp         # Python bindings
 ├── python/
-│   └── gui_controller.py
-│   └── background_selector.py
-│   └── themed_messagebox.py
-├── CMakeLists.txt
+│   ├── gui_controller.py    # Main GUI application
+│   ├── background_selector.py  # Media picker dialog
+│   └── themed_messagebox.py    # Themed message boxes
+├── USBLCD/                  # Media library
+│   ├── images/              # 440 static theme images
+|       └── *.json           # Theme configuration files
+│   ├── videos/              # 596 video files
+├── docs/
+│   └── screenshots/         # Documentation images
+├── .github/
+│   └── workflows/
+│       └── build-appimage.yml  # CI/CD pipeline
+├── CMakeLists.txt           # Build configuration
+├── debian/
+│   └── changelog            # Version tracking
 └── README.md
 ```
 
@@ -122,22 +172,185 @@ lcd-sysmon/
 
 ## ▶️ Usage
 
-- On first run, no `config.json` exists → defaults are provided by the backend.  
-- When settings are saved in the GUI, `config.json` is written to the working directory.  
-- GUI runs at **25 fps** when focused, slows to conserve CPU when unfocused.  
+### First Run
+- On first run, no `config.json` exists → defaults are loaded from backend
+- Select your preferred theme and system monitoring options
+- Click "Apply Settings" to save your configuration
+
+### Configuration
+- Settings are saved to `config.json` in the working directory
+- Date/time formatting uses standard `%Y-%m-%d %H:%M:%S` format
+- Use `\n` for multi-line text (useful for stacking date over time)
+- Static images with alpha channels allow video playback in transparent areas
+
+### System Tray
+- Click the close button (X) to minimize to system tray
+- LCD continues updating in the background
+- GUI stops updating to conserve CPU when hidden
+- Right-click tray icon to restore or quit
+
+### Performance
+- GUI runs at **25 fps** when focused
+- Automatically throttles when minimized or unfocused
+- Minimal CPU usage in tray mode
+
+---
+
+## ⚙️ Driver Overview
+
+This driver specifically targets the Thermalright LCD that identifies as **ALi Corp. USBLCD** (VID: `0x0402`, PID: `0x3922`). It will **not** work with other Thermalright LCD models.
+
+Since Thermalright has no plans to provide a Linux driver, this project aims to replicate the Windows software functionality as closely as possible. The result supports both static images and video playback with real-time system monitoring overlays.
+
+### Media Files
+- **Static images:** Edited from Thermalright originals to better fit Linux workflows
+- **Videos:** Copied as-is from the vendor website
+- **Preview images:** May contain vendor branding or Chinese text (preview only, not displayed on LCD)
+- All media and configuration files are in the `USBLCD/` directory
+
+### Known Limitations
+- **Startup animation:** Cannot be interrupted yet (~60 second wait required on device power-on)
+- **Handshake code:** Exists but not fully functional - WIP
+- **NVIDIA/Intel GPU monitoring:** Untested (author has AMD hardware only)
+
+If the driver loses communication with the LCD, it will display a notification. Once the startup animation completes, click OK to resume.
+
+---
+
+## 🔧 Troubleshooting
+
+### Permission Denied (USB Access)
+If you get permission errors when accessing the device:
+
+```bash
+# Add yourself to the plugdev group
+sudo usermod -aG plugdev $USER
+
+# Log out and back in for changes to take effect
+# Or create a udev rule:
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="0402", ATTR{idProduct}=="3922", MODE="0666"' | sudo tee /etc/udev/rules.d/99-thermalright-lcd.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+### LCD Stuck on Startup Animation
+This is expected behaviour. Wait approximately 60 seconds for the device's built-in startup animation to complete. The handshake code to bypass this is still under development.
+
+### Build Fails: "pybind11_json.hpp not found"
+Install the header file manually:
+
+```bash
+sudo wget -O /usr/local/include/pybind11_json.hpp \
+  https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp
+```
+
+Then rebuild:
+```bash
+cd build
+cmake ..
+make lcd_driver
+```
+
+### AppImage Won't Run
+Make sure you've made it executable:
+```bash
+chmod +x tr-driver-*.AppImage
+```
+
+If you get FUSE errors:
+```bash
+# Extract and run without FUSE
+./tr-driver-*.AppImage --appimage-extract
+./squashfs-root/AppRun
+```
+
+### GUI Doesn't Update
+If the LCD is updating but the GUI preview isn't:
+- This is expected when the window is minimized or in tray mode
+- The GUI throttles to save CPU when not visible
+- Restore the window to see live updates again
 
 ---
 
 ## 🚀 Future Plans
-- Alternative frontends (Electron, GTK, etc.).  
-- Packaging (`.deb`, Flatpak).  
-- Advanced minimize detection under GNOME (Xlib `_NET_WM_STATE_HIDDEN`).
 
-Further dcumentation can be found in the `docs` directory.
+- ✅ ~~AppImage packaging~~ (Complete!)
+- ✅ ~~GitHub Actions CI/CD~~ (Complete!)
+- ⏳ Fix startup handshake to skip animation
+- ⏳ Test and fix NVIDIA/Intel GPU monitoring
+- ⏳ Alternative frontends (Electron, GTK4, Qt)
+- ⏳ Debian/Ubuntu `.deb` packages
+- ⏳ Flatpak packaging
+- ⏳ AUR package for Arch Linux
+- ⏳ Advanced GNOME minimize detection (`_NET_WM_STATE_HIDDEN`)
+- ⏳ Wayland native support improvements
 
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Areas where help is especially needed:
+
+- **Testing:** Different distros, desktop environments, hardware configs
+- **GPU Monitoring:** NVIDIA/Intel support (untested by author)
+- **Startup Handshake:** Help reverse-engineer the device protocol
+- **UI Alternatives:** GTK, Qt, or web-based frontends
+- **Documentation:** Improve docs, add translations
+- **Packaging:** Help with distro-specific packages
+
+### How to Contribute
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+**Please open an issue first** before starting major work to discuss your ideas!
+
+---
 
 ## 🖥️ Screenshots
 
+### Main Interface
 ![Main UI](docs/screenshots/screen2.png)
 
+### Media Selector
 ![Selecting a video](docs/screenshots/screen1.png)
+
+---
+
+## 📖 Documentation
+
+Additional documentation can be found in the `docs/` directory:
+- Installation guides
+- Configuration examples
+- Theme creation tutorials
+- Development setup
+
+---
+
+## 📄 License
+
+This project is licensed under the terms specified in the [LICENSE](LICENSE) file.
+
+---
+
+## ⭐ Support
+
+If this project helped you, consider:
+- ⭐ **Starring the repo** to show your support
+- 🐛 **Reporting bugs** via GitHub Issues
+- 📝 **Improving documentation** through pull requests
+- 💬 **Sharing your experience** and configurations
+
+---
+
+## 🙏 Acknowledgments
+
+- Thermalright for the hardware (even without official Linux support!)
+- The open-source community for the amazing tools that made this possible
+- All contributors and testers who helped improve this project
+
+---
+
+**Made with ❤️ for the Linux community**
