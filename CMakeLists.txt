@@ -20,6 +20,22 @@ pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 find_package(pybind11 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
+# Try to find pybind11_json header
+find_path(PYBIND11_JSON_INCLUDE_DIR
+    NAMES pybind11_json/pybind11_json.hpp pybind11_json.hpp
+    PATHS
+        /usr/include
+        /usr/local/include
+        ${CMAKE_SOURCE_DIR}/include
+    PATH_SUFFIXES pybind11_json
+)
+
+if(PYBIND11_JSON_INCLUDE_DIR)
+    message(STATUS "Found pybind11_json: ${PYBIND11_JSON_INCLUDE_DIR}")
+else()
+    message(WARNING "pybind11_json not found - build may fail")
+endif()
+
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(PYTHON_DIR ${CMAKE_SOURCE_DIR}/python)
 set(DATA_DIR ${CMAKE_SOURCE_DIR}/USBLCD)
@@ -38,6 +54,7 @@ target_include_directories(lcd_driver PRIVATE
     ${SRC_DIR}
     ${LIBUSB_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
+    ${PYBIND11_JSON_INCLUDE_DIR}
 )
 
 target_link_libraries(lcd_driver PRIVATE
