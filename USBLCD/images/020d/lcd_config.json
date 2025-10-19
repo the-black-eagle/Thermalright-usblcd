@@ -1,0 +1,136 @@
+{
+    "M1": {
+        "color": "#000000",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 18,
+            "style": "bold"
+        },
+        "metric": "cpu_temp",
+        "x": 199,
+        "y": 57
+    },
+    "M2": {
+        "color": "#000000",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 18,
+            "style": "bold"
+        },
+        "metric": "cpu_percent",
+        "x": 202,
+        "y": 80
+    },
+    "M3": {
+        "color": "#000000",
+        "enabled": false,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 19,
+            "style": "bold"
+        },
+        "metric": "cpu_freq",
+        "x": 5,
+        "y": 184
+    },
+    "M4": {
+        "color": "#000000",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 18,
+            "style": "bold"
+        },
+        "metric": "gpu_temp",
+        "x": 199,
+        "y": 131
+    },
+    "M5": {
+        "color": "#000000",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 18,
+            "style": "bold"
+        },
+        "metric": "gpu_usage",
+        "x": 202,
+        "y": 153
+    },
+    "M6": {
+        "color": "#35A7FF",
+        "enabled": false,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 20,
+            "style": "bold"
+        },
+        "metric": "gpu_clock",
+        "x": 195,
+        "y": 180
+    },
+    "cpu_label": {
+        "color": "#000000",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 18,
+            "style": "bold"
+        },
+        "text": "CPU",
+        "x": 142,
+        "y": 58
+    },
+    "custom": {
+        "color": "#000000",
+        "enabled": false,
+        "font": {
+            "family": "Verdana",
+            "size": 8,
+            "style": "bold"
+        },
+        "text": "LIQUID COOLED",
+        "x": 122,
+        "y": 117
+    },
+    "date": {
+        "color": "#999999",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 16,
+            "style": "bold"
+        },
+        "format": " %d/%m\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n   %a",
+        "x": 45,
+        "y": 90
+    },
+    "gpu_label": {
+        "color": "#000000",
+        "enabled": true,
+        "font": {
+            "family": "DejaVu Sans",
+            "size": 18,
+            "style": "bold"
+        },
+        "text": "GPU",
+        "x": 142,
+        "y": 132
+    },
+    "image_background_path": "/media/sdg1/lcd-sysmon/USBLCD/images/020d/01.png",
+    "time": {
+        "color": "#999999",
+        "enabled": true,
+        "font": {
+            "family": "Verdana",
+            "size": 24,
+            "style": "bold"
+        },
+        "format": "24h",
+        "x": 39,
+        "y": 105
+    },
+    "video_background_path": null
+}
