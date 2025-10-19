@@ -3,7 +3,7 @@ name: Build AppImage
 on:
   push:
     tags:
-      - 'v*'  # Trigger on version tags like v1.0.0
+      - '*'  # Trigger on any tag
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
