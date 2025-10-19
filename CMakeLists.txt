@@ -4,6 +4,14 @@ project(tr_driver LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# --- Extract version from debian/changelog ---
+execute_process(
+    COMMAND bash -c "head -n1 ${CMAKE_SOURCE_DIR}/debian/changelog | awk '{print $2}' | tr -d '()'"
+    OUTPUT_VARIABLE APP_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message(STATUS "Detected version from changelog: ${APP_VERSION}")
+
 # --- Dependencies
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -87,7 +95,8 @@ add_custom_target(driver
 add_custom_target(lcd_test
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/background_selector.py ${CMAKE_CURRENT_BINARY_DIR}/background_selector.py
-    
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/themed_messagebox.py ${CMAKE_CURRENT_BINARY_DIR}/themed_messagebox.py
+
     # Create symlink to USBLCD in build directory for development
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/USBLCD
     
@@ -116,6 +125,7 @@ add_custom_command(TARGET appimage POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/lcd_driver*.so ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/lib/
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/gui_controller.py
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/background_selector.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/background_selector.py
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/themed_messagebox.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/themed_messagebox.py
 
     # Copy USBLCD data directory
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/tr-driver/USBLCD
@@ -131,14 +141,16 @@ add_custom_command(TARGET appimage POST_BUILD
     COMMAND ${Python3_EXECUTABLE} -m pip install pyinstaller --upgrade
     COMMAND ${Python3_EXECUTABLE} -m PyInstaller --onefile --name ${APP_NAME} --icon=${APP_ICON} 
             --add-data "${DATA_DIR}:USBLCD"
-            --hidden-import=PIL._tkinter_finder --hidden-import=PIL._imagingtk --hidden-import=PIL.ImageTk 
+            --hidden-import=PIL._tkinter_finder --hidden-import=PIL._imagingtk --hidden-import=PIL.ImageTk --hidden-import=tkinter --hidden-import=pystray
             ${CMAKE_SOURCE_DIR}/python/gui_controller.py
 
     # Copy frozen binary to AppDir
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/dist/${APP_NAME} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/${APP_NAME}
 
-    # Build final AppImage
-    COMMAND appimagetool ${CMAKE_CURRENT_BINARY_DIR}/AppDir ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}-x86_64.AppImage
+    # Build final AppImage with versioned name
+    COMMAND appimagetool
+        ${CMAKE_CURRENT_BINARY_DIR}/AppDir
+        ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}-${APP_VERSION}-x86_64.AppImage
     EXCLUDE_FROM_ALL
 )
 add_dependencies(appimage lcd_driver)
