@@ -1,23 +1,24 @@
 # Copyright 2025 the-black-eagle (18698554+the-black-eagle@users.noreply.github.com)
 
-   # Licensed under the Apache License, Version 2.0 (the "License");
-   # you may not use this file except in compliance with the License.
-   # You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 
-       # http://www.apache.org/licenses/LICENSE-2.0
+    # http://www.apache.org/licenses/LICENSE-2.0
 
-   # Unless required by applicable law or agreed to in writing, software
-   # distributed under the License is distributed on an "AS IS" BASIS,
-   # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   # See the License for the specific language governing permissions and
-   # limitations under the License.
-
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 import os
 import io
+import sys
 import tkinter as tk
-from tkinter import ttk, filedialog, colorchooser, font, simpledialog, messagebox, Button
+from tkinter import ttk, filedialog, colorchooser, font, simpledialog, Button
+import themed_messagebox as messagebox
 from datetime import datetime
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 import subprocess
@@ -32,6 +33,7 @@ from collections import deque
 
 READY_TIMEOUT = 30  # seconds
 
+
 def wait_for_lcd_ready(lcd_driver):
     start = time.time()
     while time.time() - start < READY_TIMEOUT:
@@ -40,6 +42,7 @@ def wait_for_lcd_ready(lcd_driver):
         time.sleep(0.2)
     return True
 
+
 def on_reset_click():
     try:
         lcd_driver.reset_transport()
@@ -47,6 +50,260 @@ def on_reset_click():
     except Exception as e:
         print(f"Reset failed: {e}")
 
+import os
+import tkinter as tk
+from tkinter import ttk
+from pathlib import Path
+
+class DarkFileBrowser(tk.Toplevel):
+    def __init__(self, parent, title="Select File", filetypes=None, initialdir=None):
+        super().__init__(parent)
+        self.title(title)
+        self.configure(bg="#2b2b2b")
+        self.geometry("600x400")
+        self.minsize(500, 350)  # Minimum size to show all elements
+        
+        self.result = None
+        self.filetypes = filetypes or [("All files", "*.*")]
+        self.current_dir = initialdir or os.path.expanduser("~")
+        
+        self.setup_ui()
+        self.load_directory(self.current_dir)
+        
+        # Make modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Center on parent
+        self.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
+        self.geometry(f"+{x}+{y}")
+    
+    def setup_ui(self):
+        # Style configuration
+        style = ttk.Style()
+        style.theme_use('default')
+        
+        # Treeview styling
+        style.configure("Dark.Treeview",
+                       background="#2b2b2b",
+                       foreground="white",
+                       fieldbackground="#2b2b2b",
+                       borderwidth=0)
+        style.map("Dark.Treeview",
+                 background=[('selected', '#4CAF50')])
+        
+        # Top frame - Directory navigation
+        top_frame = tk.Frame(self, bg="#2b2b2b")
+        top_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(top_frame, text="Directory:", bg="#2b2b2b", fg="white",
+                font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
+        
+        self.dir_entry = tk.Entry(top_frame, bg="#3c3c3c", fg="white",
+                                 insertbackground="white", relief="flat")
+        self.dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        self.dir_entry.bind('<Return>', lambda e: self.load_directory(self.dir_entry.get()))
+        
+        # Up directory button
+        up_btn = tk.Button(top_frame, text="↑", bg="#4CAF50", fg="white",
+                          relief="flat", width=3, command=self.go_up)
+        up_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Refresh button
+        refresh_btn = tk.Button(top_frame, text="⟳", bg="#2196F3", fg="white",
+                               relief="flat", width=3, command=self.refresh)
+        refresh_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Middle frame - File/folder list
+        middle_frame = tk.Frame(self, bg="#2b2b2b")
+        middle_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(middle_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Treeview
+        self.tree = ttk.Treeview(middle_frame, style="Dark.Treeview",
+                                yscrollcommand=scrollbar.set, selectmode='browse')
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.tree.yview)
+        
+        # Columns
+        self.tree['columns'] = ('size', 'modified')
+        self.tree.column('#0', width=300, minwidth=200)
+        self.tree.column('size', width=100, minwidth=50)
+        self.tree.column('modified', width=150, minwidth=100)
+        
+        self.tree.heading('#0', text='Name', anchor=tk.W)
+        self.tree.heading('size', text='Size', anchor=tk.W)
+        self.tree.heading('modified', text='Modified', anchor=tk.W)
+        
+        # Bind events
+        self.tree.bind('<Double-Button-1>', self.on_double_click)
+        self.tree.bind('<<TreeviewSelect>>', self.on_select)
+        
+        # Bottom frame - File name and buttons
+        bottom_frame = tk.Frame(self, bg="#2b2b2b")
+        bottom_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        tk.Label(bottom_frame, text="File name:", bg="#2b2b2b", fg="white",
+                font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
+        
+        self.filename_entry = tk.Entry(bottom_frame, bg="#3c3c3c", fg="white",
+                                      insertbackground="white", relief="flat")
+        self.filename_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        
+        # File type filter
+        filter_frame = tk.Frame(self, bg="#2b2b2b")
+        filter_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        tk.Label(filter_frame, text="Files of type:", bg="#2b2b2b", fg="white",
+                font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
+        
+        display_filetypes = [f"{desc} ({pattern})" for desc, pattern in self.filetypes]
+        display_filetypes = [str(ft).strip("{}") for ft in display_filetypes]
+        self.filetype_var = tk.StringVar(value=display_filetypes[0])
+        print(f"Display filetypes is '{display_filetypes}'")
+        filetype_menu = ttk.Combobox(filter_frame, textvariable=self.filetype_var,
+                                    values=display_filetypes,
+                                    state='readonly', width = 150)
+        filetype_menu.pack(side=tk.LEFT, padx=5)
+        filetype_menu.bind('<<ComboboxSelected>>', lambda e: self.refresh())
+        
+        # Buttons
+        button_frame = tk.Frame(self, bg="#2b2b2b")
+        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        open_btn = tk.Button(button_frame, text="Open", bg="#4CAF50", fg="white",
+                            relief="flat", font=("Arial", 11, "bold"),
+                            width=12, command=self.on_open)
+        open_btn.pack(side=tk.RIGHT, padx=5)
+        
+        cancel_btn = tk.Button(button_frame, text="Cancel", bg="#f44336", fg="white",
+                              relief="flat", font=("Arial", 11, "bold"),
+                              width=12, command=self.on_cancel)
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
+    
+    def load_directory(self, path):
+        try:
+            path = os.path.abspath(path)
+            if not os.path.isdir(path):
+                return
+            
+            self.current_dir = path
+            self.dir_entry.delete(0, tk.END)
+            self.dir_entry.insert(0, path)
+            
+            # Clear tree
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            
+            # Get file type filter
+            selected_ft = self.filetype_var.get()
+            extensions = []
+            for ft_name, ft_pattern in self.filetypes:
+                if ft_name in selected_ft:
+                    extensions = ft_pattern.replace('*', '').split()
+                    break
+            
+            # List directories first, then files
+            items = []
+            try:
+                for entry in os.scandir(path):
+                    try:
+                        stat = entry.stat()
+                        size = self.format_size(stat.st_size) if entry.is_file() else ""
+                        modified = self.format_time(stat.st_mtime)
+                        
+                        # Filter files by extension
+                        if entry.is_file() and extensions:
+                            if not any(entry.name.lower().endswith(ext.lower()) for ext in extensions):
+                                continue
+                        
+                        items.append((entry.is_dir(), entry.name, size, modified))
+                    except (PermissionError, OSError):
+                        continue
+            except PermissionError:
+                pass
+            
+            # Sort: directories first, then by name
+            items.sort(key=lambda x: (not x[0], x[1].lower()))
+            
+            # Add to tree
+            for is_dir, name, size, modified in items:
+                icon = "📁" if is_dir else "📄"
+                self.tree.insert('', 'end', text=f"{icon} {name}",
+                               values=(size, modified))
+        
+        except Exception as e:
+            print(f"Error loading directory: {e}")
+    
+    def format_size(self, size):
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
+    
+    def format_time(self, timestamp):
+        from datetime import datetime
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M')
+    
+    def go_up(self):
+        parent = os.path.dirname(self.current_dir)
+        if parent != self.current_dir:
+            self.load_directory(parent)
+    
+    def refresh(self):
+        self.load_directory(self.current_dir)
+    
+    def on_double_click(self, event):
+        selection = self.tree.selection()
+        if not selection:
+            return
+        
+        item = self.tree.item(selection[0])
+        name = item['text'].split(' ', 1)[1]  # Remove icon
+        path = os.path.join(self.current_dir, name)
+        
+        if os.path.isdir(path):
+            self.load_directory(path)
+        else:
+            self.filename_entry.delete(0, tk.END)
+            self.filename_entry.insert(0, name)
+            self.on_open()
+    
+    def on_select(self, event):
+        selection = self.tree.selection()
+        if selection:
+            item = self.tree.item(selection[0])
+            name = item['text'].split(' ', 1)[1]  # Remove icon
+            path = os.path.join(self.current_dir, name)
+            
+            if os.path.isfile(path):
+                self.filename_entry.delete(0, tk.END)
+                self.filename_entry.insert(0, name)
+    
+    def on_open(self):
+        filename = self.filename_entry.get()
+        if filename:
+            self.result = os.path.join(self.current_dir, filename)
+            self.destroy()
+    
+    def on_cancel(self):
+        self.result = None
+        self.destroy()
+
+
+def askopenfilename(parent=None, title="Select File", filetypes=None, initialdir=None):
+    """
+    Dark-themed file dialog replacement for filedialog.askopenfilename()
+    """
+    dialog = DarkFileBrowser(parent or tk._default_root, title, filetypes, initialdir)
+    dialog.wait_window()
+    return dialog.result or ""
 
 class DraggableTextPillow:
     """A Pillow-based draggable text item."""
@@ -80,7 +337,7 @@ class DraggableTextPillow:
                 ["fc-list", f":family={family}"],
                 capture_output=True, text=True, check=True
             )
-            
+
             candidates = []
             for line in result.stdout.splitlines():
                 if ":" in line:
@@ -94,79 +351,79 @@ class DraggableTextPillow:
                             except IndexError:
                                 style_info = ""
                         candidates.append((path, style_info))
-    
+
             if not candidates:
                 print(f"No font found for family: {family}")
                 return None
-    
+
             # Filter by style if specified
             style = style.lower()
             if style != "normal" and len(candidates) > 1:
                 style_filtered = []
-                
+
                 for path, font_style in candidates:
                     path_lower = path.lower()
                     font_style_lower = font_style.lower()
-                    
+
                     # Check for bold
                     if "bold" in style:
                         if ("bold" in font_style_lower or "bold" in path_lower) and \
-                           not ("italic" in style or "oblique" in style or 
+                           not ("italic" in style or "oblique" in style or
                                 "italic" in font_style_lower or "oblique" in font_style_lower):
                             style_filtered.append((path, font_style))
-                    
+
                     # Check for italic/oblique
                     elif "italic" in style or "oblique" in style:
-                        if ("italic" in font_style_lower or "oblique" in font_style_lower or 
+                        if ("italic" in font_style_lower or "oblique" in font_style_lower or
                             "italic" in path_lower or "oblique" in path_lower) and \
                            not ("bold" in style or "bold" in font_style_lower or "bold" in path_lower):
                             style_filtered.append((path, font_style))
-                    
+
                     # Check for bold italic
                     elif "bold" in style and ("italic" in style or "oblique" in style):
                         if ("bold" in font_style_lower or "bold" in path_lower) and \
-                           ("italic" in font_style_lower or "oblique" in font_style_lower or 
+                           ("italic" in font_style_lower or "oblique" in font_style_lower or
                             "italic" in path_lower or "oblique" in path_lower):
                             style_filtered.append((path, font_style))
-                
+
                 if style_filtered:
                     candidates = style_filtered
-            
+
             # For normal style, prefer fonts without Bold/Italic in the name
             elif style == "normal" and len(candidates) > 1:
                 normal_candidates = []
                 for path, font_style in candidates:
                     path_lower = path.lower()
                     font_style_lower = font_style.lower()
-                    
-                    if not any(keyword in path_lower or keyword in font_style_lower 
+
+                    if not any(keyword in path_lower or keyword in font_style_lower
                              for keyword in ["bold", "italic", "oblique", "condensed", "light", "thin"]):
                         normal_candidates.append((path, font_style))
-                
+
                 if normal_candidates:
                     candidates = normal_candidates
-            
+
             # Final preference: avoid condensed fonts if regular variants exist
             if len(candidates) > 1:
                 non_condensed = []
                 for path, font_style in candidates:
                     path_lower = path.lower()
                     font_style_lower = font_style.lower()
-                    
+
                     if "condensed" not in path_lower and "condensed" not in font_style_lower:
                         non_condensed.append((path, font_style))
-                
+
                 if non_condensed:
                     candidates = non_condensed
-    
+
             # Return the first valid candidate
             for path, _ in candidates:
                 if os.path.exists(path):
                     return path
-                    
+
             print(f"Font files not found on filesystem for: {family}")
             return None
-            
+
         except subprocess.CalledProcessError as e:
             print(f"fc-list command failed: {e}")
             return None
@@ -178,7 +435,7 @@ class DraggableTextPillow:
         """Return a list of common fallback font paths to try"""
         common_fonts = [
             "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -188,7 +445,7 @@ class DraggableTextPillow:
             "C:/Windows/Fonts/arial.ttf",  # Windows
             "C:/Windows/Fonts/Arial.ttf",  # Windows
         ]
-        
+
         # Return only fonts that actually exist
         return [font for font in common_fonts if os.path.exists(font)]
 
@@ -206,7 +463,7 @@ class DraggableTextPillow:
                     # Try to find the font
                     instance = cls("temp", "", 0, 0, font_config, "#000000", None)
                     font_path = instance.find_font_path(family, font_config.get('style', 'normal'))
-                    
+
                     if font_path and os.path.exists(font_path):
                         cls._font_cache[key] = ImageFont.truetype(font_path, font_config['size'])
                     else:
@@ -221,15 +478,15 @@ class DraggableTextPillow:
                                 break
                             except Exception:
                                 continue
-                        
+
                         if not font_loaded:
                             cls._font_cache[key] = ImageFont.load_default()
                             print("Using default font - no TrueType fonts found")
-                            
+
             except Exception as e:
                 print(f"Font loading error: {e}")
                 cls._font_cache[key] = ImageFont.load_default()
-                
+
         return cls._font_cache[key]
 
     def _get_font(self):
@@ -239,16 +496,16 @@ class DraggableTextPillow:
             size = self.font_config.get("size", 24)
             family = self.font_config.get("family", "DejaVu Sans")
             style = self.font_config.get("style", "normal")
-            
+
             font_path = None
-            
+
             # If family is already a path, use it directly
             if os.path.exists(family) and (family.endswith('.ttf') or family.endswith('.otf')):
                 font_path = family
             else:
                 # Try to find the font
                 font_path = self.find_font_path(family, style)
-            
+
             # Try to load the font
             try:
                 if font_path and os.path.exists(font_path):
@@ -267,20 +524,33 @@ class DraggableTextPillow:
                         except Exception as e:
                             print(f"Failed to load fallback {fallback}: {e}")
                             continue
-                    
+
                     if not font_loaded:
                         self._pil_font = ImageFont.load_default()
                         print("Using PIL default font")
-                        
+
             except Exception as e:
                 print(f"Font loading error: {e}")
                 self._pil_font = ImageFont.load_default()
-                
+
         return self._pil_font
+
 
     def draw(self, image_draw: ImageDraw.Draw):
         pil_font = self._get_font()
-        image_draw.text((self.x, self.y), self.text, font=pil_font, fill=self.color)
+        self.text = self.text.replace('\\n', '\n')
+        # Split text by newlines and draw each line
+        lines = self.text.split('\n')
+        y_offset = self.y
+
+        for line in lines:
+            image_draw.text((self.x, y_offset), line, font=pil_font, fill=self.color)
+
+            # Calculate line height and move down for next line
+            bbox = image_draw.textbbox((0, 0), line, font=pil_font)
+            line_height = bbox[3] - bbox[1]
+            y_offset += line_height + 2
+
 
     def contains(self, px, py):
         pil_font = self._get_font()  # Use instance method instead of class method
@@ -301,18 +571,55 @@ class DraggableTextPillow:
                 estimated_height = self.font_config.get("size", 24)
                 return self.x <= px <= self.x + estimated_width and self.y <= py <= self.y + estimated_height
 
+
+    def _measure_text_block(self, text, font):
+        """Measure multi-line text (width, height) using the given font."""
+        text = text.replace('\\n', '\n')
+
+        lines = text.split("\n")
+        max_width = 0
+        total_height = 0
+
+        for line in lines:
+            if not line:
+                # Empty line still contributes roughly one line height
+                line_height = font.getsize("A")[1]
+                total_height += line_height
+                continue
+
+            try:
+                bbox = font.getbbox(line)
+                width = bbox[2] - bbox[0]
+                height = bbox[3] - bbox[1]
+            except Exception:
+                width, height = font.getsize(line)
+
+            max_width = max(max_width, width)
+            total_height += height
+
+        return max_width, total_height
+
+
     def move(self, dx, dy, max_width=320, max_height=240, margin=5, update_lcd=True):
-        self.x = max(margin, min(self.x + dx, max_width - margin))
-        self.y = max(margin, min(self.y + dy, max_height - margin))
+        """Move item with bounds checking (multi-line aware)."""
+        pil_font = self._get_font()
+        text_w, text_h = self._measure_text_block(self.text, pil_font)
+
+        # Clamp coordinates so text stays fully visible
+        self.x = max(margin, min(self.x + dx, max_width - text_w - margin))
+        self.y = max(margin, min(self.y + dy, max_height - text_h - margin))
     
-        # Only update LCD if explicitly requested (not during drag)
         if update_lcd and self.update_callback:
             self.update_callback()
-            
+
+
     def move_without_callback(self, dx, dy, max_width=320, max_height=240, margin=5):
-        """Move item without triggering update callback - used during dragging"""
-        self.x = max(margin, min(self.x + dx, max_width - margin))
-        self.y = max(margin, min(self.y + dy, max_height - margin))
+        """Move item silently (used during drag) – multi-line aware."""
+        pil_font = self._get_font()
+        text_w, text_h = self._measure_text_block(self.text, pil_font)
+
+        self.x = max(margin, min(self.x + dx, max_width - text_w - margin))
+        self.y = max(margin, min(self.y + dy, max_height - text_h - margin))
 
 
     def update_text(self, text, trigger_callback=True):
@@ -330,9 +637,11 @@ class DraggableTextPillow:
         if self.update_callback:
             self.update_callback()
 
+
     def apply_style(self):
         if self.update_callback:
             self.update_callback()
+
 
     def _centre_window(self, window, parent=None):
         """Centre a window on its parent or screen"""
@@ -360,6 +669,7 @@ class DraggableTextPillow:
             y = (screen_height - window_height) // 2
 
         window.geometry(f"+{x}+{y}")
+
 
     def open_style_editor(self, parent=None):
         popup = tk.Toplevel(parent or self.canvas)
@@ -418,12 +728,14 @@ class DraggableTextPillow:
         button_frame = tk.Frame(popup, bg="#2b2b2b")
         button_frame.grid(row=4, column=0, columnspan=3, pady=10)
 
+
         def apply():
             self.font_config["family"] = font_var.get()
             self.font_config["size"] = size_var.get()
             self.font_config["style"] = style_var.get()
             self.color = color_var.get()
             self.update_style(self.font_config, self.color)
+
 
         def apply_and_close():
             apply()
@@ -461,7 +773,6 @@ class ModernToggleSwitch(tk.Canvas):
         self.width = width
         self.height = height
 
-        # Colors matching TRCC
         self.bg_on = "#4CAF50"
         self.bg_off = "#555555"
         self.knob_color = "#FFFFFF"
@@ -471,8 +782,10 @@ class ModernToggleSwitch(tk.Canvas):
 
         self.update_display()
 
+
     def toggle(self, event=None):
         self.variable.set(not self.variable.get())
+
 
     def update_display(self, *args):
         self.delete("all")
@@ -498,6 +811,7 @@ class ModernToggleSwitch(tk.Canvas):
             points.extend([x, y])
         return self.create_polygon(points, smooth=True, **kwargs)
 
+
 class ModernSectionFrame(tk.Frame):
     """Modern section frame with header and toggle"""
     def __init__(self, parent, title="", toggle_var=None, **kwargs):
@@ -521,6 +835,7 @@ class ModernSectionFrame(tk.Frame):
         # Content frame
         self.content_frame = tk.Frame(self, bg="#2a2a2a")
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
 
 class ModernModuleButton(tk.Frame):
     """Modern module button matching TRCC style"""
@@ -551,19 +866,23 @@ class ModernModuleButton(tk.Frame):
             widget.bind("<Enter>", self.on_enter)
             widget.bind("<Leave>", self.on_leave)
 
+
     def on_click(self, event):
         if self.command:
             self.command()
+
 
     def on_enter(self, event):
         if not self.active:
             self.btn_frame.config(bg=self.hover_color)
             self.label.config(bg=self.hover_color)
 
+
     def on_leave(self, event):
         if not self.active:
             self.btn_frame.config(bg=self.inactive_color)
             self.label.config(bg=self.inactive_color)
+
 
     def set_active(self, active):
         self.active = active
@@ -571,14 +890,19 @@ class ModernModuleButton(tk.Frame):
         self.btn_frame.config(bg=color)
         self.label.config(bg=color)
 
+
     def set_text(self, text):
         """Update the label text."""
         self.label.config(text=text)
+
 
 class LCDController:
     def __init__(self, root, config_file="lcd_config.json"):
         self.root = root
         self._update_queue = queue.Queue(maxsize=1)  # only keep latest request
+        self._stop_threads = threading.Event()  # Flag to stop threads
+        self._paused = threading.Event()  # Flag to pause updates
+        self._paused.set()  # Start unpaused
         self._update_thread = threading.Thread(target=self._update_worker, daemon=True)
         self._update_thread.start()
         self.config_file = config_file
@@ -599,6 +923,9 @@ class LCDController:
         self._frame_counter = 0
         self.is_obscured = False
         self.gui_should_update = True
+        self.video_bg_path_var = ""
+        self.image_bg_path_var = ""
+        self.usb_ok = False
 
         self.bg_manager = lcd_driver.get_background_manager()
 
@@ -609,6 +936,7 @@ class LCDController:
         self.setup_ui()
         self.setup_draggable_elements()
         self.start_data_updates()
+
 
     def setup_ui(self):
         self.root.title("Linux USB LCD Controller")
@@ -624,7 +952,6 @@ class LCDController:
         except Exception as e:
             print(f"Could not set window icon: {e}")
 
-
         # Configure style
         self.setup_styles()
 
@@ -639,6 +966,7 @@ class LCDController:
         self.setup_primary_control_panel(main_container)
         self.setup_secondary_control_panel(main_container)
 
+
     def setup_styles(self):
         """Setup ttk styles for modern appearance"""
         style = ttk.Style()
@@ -651,6 +979,7 @@ class LCDController:
                        borderwidth=0,
                        lightcolor='#4CAF50',
                        darkcolor='#4CAF50')
+
 
     def setup_display_panel(self, parent):
         """Setup left panel with LCD display and module buttons"""
@@ -683,6 +1012,7 @@ class LCDController:
 
         # Module buttons
         self.setup_module_buttons_modern(display_panel)
+
 
     def setup_module_buttons_modern(self, parent):
         """Setup modern module buttons grid"""
@@ -719,7 +1049,8 @@ class LCDController:
             button_grid.grid_columnconfigure(col, weight=1)
 
             self.module_buttons[name] = btn
-    
+
+
     def refresh_module_buttons(self):
         """Update module button labels and states based on current config"""
         config = self.config_manager.get_config()
@@ -731,6 +1062,7 @@ class LCDController:
 
             btn.set_text(f"{name}\n{metric}")
             btn.set_active(enabled)
+
 
     def refresh_system_toggles(self):
         """Update toggle states and module UI from current config without triggering traces."""
@@ -801,7 +1133,10 @@ class LCDController:
             self.refresh_module_buttons()
             self.refresh_system_toggles()
             self.setup_draggable_elements()  # Refresh display
+            self.clear_image_background()
+            self.clear_video_background()
             self.update_display_immediately()
+
 
     def _centre_window(self, window, parent=None):
         """Centre a window on its parent or screen"""
@@ -830,19 +1165,26 @@ class LCDController:
 
         window.geometry(f"+{x}+{y}")
 
+
     def setup_primary_control_panel(self, parent):
         """Setup middle panel with main controls"""
         control_panel = tk.Frame(parent, bg="#1e1e1e")
         control_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20)
-
+        
         self.setup_custom_text_modern(control_panel)
         self.setup_datetime_modern(control_panel)
         self.setup_system_info_modern(control_panel)
+
 
     def setup_secondary_control_panel(self, parent):
         """Setup right panel with background and save controls"""
         secondary_panel = tk.Frame(parent, bg="#1e1e1e")
         secondary_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 0))
+        
+        loading_label = tk.Label(secondary_panel, text="Loading thumbnails...", 
+                                bg="#2b2b2b", fg="white", font=("Arial", 12))
+        loading_label.pack(expand=True)
+        secondary_panel.update()
         
         # Background section
         self.setup_background_modern(secondary_panel)
@@ -850,23 +1192,7 @@ class LCDController:
         # Add some spacing
         spacer = tk.Frame(secondary_panel, bg="#1e1e1e", height=20)
         spacer.pack(fill=tk.X)
-
-        # Save configuration section
-        save_section = ModernSectionFrame(secondary_panel, "Actions")
-        save_section.pack(fill=tk.X, pady=(0, 15))
-
-        # Save button
-        save_btn = tk.Button(save_section.content_frame, text="Save Configuration",
-                            command=self.save_config,
-                            bg="#4CAF50", fg="white", font=("Arial", 12, "bold"),
-                            relief="flat", pady=12)
-        save_btn.pack(fill=tk.X, padx=5, pady=5)
-
-        reset_btn = tk.Button(save_section.content_frame, text="Reset to Defaults",
-                         command=self.reset_config,
-                         bg="#FF9800", fg="white", font=("Arial", 11),
-                         relief="flat", pady=8)
-        reset_btn.pack(fill=tk.X, padx=5, pady=(0, 5))
+        loading_label.destroy()
 
 
     def setup_custom_text_modern(self, parent):
@@ -899,10 +1225,12 @@ class LCDController:
         # Debounced update implementation
         self._custom_text_debounce_job = None
 
+
         def on_custom_text_change(*args):
             if self._custom_text_debounce_job is not None:
                 self.root.after_cancel(self._custom_text_debounce_job)
             self._custom_text_debounce_job = self.root.after(150, do_update)
+
 
         def do_update():
             new_text = self.custom_text_var.get()
@@ -913,6 +1241,7 @@ class LCDController:
 
             self.update_display_immediately()
             self._custom_text_debounce_job = None
+
 
         # Simple toggle handler like date/time
         def on_custom_toggle():
@@ -1081,38 +1410,50 @@ class LCDController:
 
 
     def setup_background_modern(self, parent):
-        """Modern background section"""
-        config = self.config_manager.get_config()
+        """Tabbed background selector (themes & videos)."""
+        from background_selector import BackgroundSelector
 
-        section = ModernSectionFrame(parent, "Background")
-        section.pack(fill=tk.X, pady=(0, 15))
+        selector = BackgroundSelector(
+            parent,
+            config_manager=self.config_manager,
+            apply_theme_callback=self.apply_theme_preview,
+            apply_video_callback=self.apply_video_preview,
+            browse_image_callback=self.browse_image_background,
+            browse_video_callback=self.browse_video_background  
+        )
+        selector.pack(fill=tk.BOTH, expand=True, padx=5, pady=0)
 
-        # Current background
-        self.bg_path_var = tk.StringVar(value=config.get("background_path", "None"))
 
-        path_frame = tk.Frame(section.content_frame, bg="#2a2a2a")
-        path_frame.pack(fill=tk.X, pady=5)
+    def apply_theme_preview(self, image_path):
+        """Apply a theme image immediately after selection."""
+        self.config_manager.update_config_value("image_background_path", image_path)
+        self.refresh_module_buttons()
+        self.refresh_system_toggles()
+        self.setup_draggable_elements()  # Refresh display
+        if hasattr(self, "custom_text_var"):
+            custom_conf = self.config_manager.get_config().get("custom", {})
+            self.custom_text_var.set(custom_conf.get("text", ""))
 
-        tk.Label(path_frame, text="Current:", fg="#CCCCCC", bg="#2a2a2a").pack(anchor="w")
+        if hasattr(self, "date_format_var"):
+            date_conf = self.config_manager.get_config().get("date", {})
+            self.date_format_var.set(date_conf.get("format", "%d-%m-%Y"))
+            try:
+                self.update_date_preview()
+            except Exception:
+                pass
 
-        path_display = tk.Label(path_frame, textvariable=self.bg_path_var,
-                               fg="#4CAF50", bg="#2a2a2a", font=("Arial", 9),
-                               wraplength=250, justify="left")
-        path_display.pack(anchor="w", pady=(2, 0))
+        if hasattr(self, "time_format_var"):
+            time_conf = self.config_manager.get_config().get("time", {})
+            self.time_format_var.set(time_conf.get("format", "24h"))
 
-        # Buttons
-        btn_frame = tk.Frame(section.content_frame, bg="#2a2a2a")
-        btn_frame.pack(fill=tk.X, pady=(10, 0))
+        self.update_display_immediately()
+    
+    def apply_video_preview(self, video_path):
+        """Apply a video background immediately after selection."""
+        self.config_manager.update_config_value("video_background_path", video_path)
+        self.render_background()
+        self.update_display_immediately()
 
-        browse_btn = tk.Button(btn_frame, text="Browse...",
-                              command=self.browse_background,
-                              bg="#4CAF50", fg="white", relief="flat", font=("Arial", 10))
-        browse_btn.pack(side="left", padx=(0, 10), ipady=3)
-
-        clear_btn = tk.Button(btn_frame, text="Clear",
-                             command=self.clear_background,
-                             bg="#f44336", fg="white", relief="flat", font=("Arial", 10))
-        clear_btn.pack(side="left", ipady=3)
 
     # Event handlers
     def on_time_format_change(self):
@@ -1132,6 +1473,7 @@ class LCDController:
         if "date" in self.draggable_items:
             try:
                 date_text = datetime.now().strftime(fmt)
+                date_text = date_text.replace('\\n', '\n')
                 self.draggable_items["date"].update_text(date_text)
             except Exception:
                 self.draggable_items["date"].update_text("Invalid Format")
@@ -1142,6 +1484,7 @@ class LCDController:
         fmt = self.date_format_var.get()
         try:
             preview_text = datetime.now().strftime(fmt)
+            preview_text = preview_text.replace('\\n','')
             self.date_preview.config(text=f"Preview: {preview_text}")
         except Exception:
             self.date_preview.config(text="Preview: Invalid format")
@@ -1151,24 +1494,51 @@ class LCDController:
         self.config_manager.update_config_value(f"{name}.enabled", enabled)
         self.update_display_immediately()
 
-    def browse_background(self):
-        filename = filedialog.askopenfilename(
-        title="Select Background",
-        filetypes=[
-            ("Image files", "*.png *.jpg *.jpeg *.bmp *.gif"),
+    def browse_video_background(self):
+        """Browse for video background file"""
+        filetypes = (
             ("Video files", "*.mp4 *.avi *.mov *.mkv"),
-            ("All files", "*.*"),
-        ]
+            ("All files", "*.*")
         )
-
+        filename = askopenfilename(parent=self.root, title="Select Video Background", filetypes=filetypes, initialdir=os.getcwd())
         if filename:
-            self.bg_path_var.set(os.path.basename(filename))
-            self.config_manager.update_config_value("background_path", filename)
+            self.video_bg_path_var=filename
+            self.config_manager.update_config_value("video_background_path", filename)
             self.update_display_immediately()
 
-    def clear_background(self):
-        self.bg_path_var.set("None")
-        self.config_manager.update_config_value("background_path", None)
+    def clear_video_background(self):
+        """Clear video background"""
+        self.video_bg_path_var.set("None")
+        self.config_manager.update_config_value("video_background_path", None)
+        self.update_display_immediately()
+
+    def browse_image_background(self):
+        """Browse for image background file"""
+        filetypes = (
+            ("Image files", "*.png *.jpg *.jpeg *.bmp *.gif"),
+            ("All files", "*.*")
+        )
+        filename = askopenfilename(parent=self.root,title="Select Image Background", filetypes=filetypes, initialdir=os.getcwd())
+        if filename:
+            self.image_bg_path_var=filename
+            directory = os.path.dirname(filename)
+            local_config_file = os.path.join(directory, "lcd_config.json")
+    
+            if os.path.exists(local_config_file):
+                self.config_manager.load_config(local_config_file)
+                self.refresh_module_buttons()
+                self.refresh_system_toggles()
+                self.setup_draggable_elements()  # Refresh display
+            if self.video_bg_path_var:
+                self.video_bg_path_var.set("None")
+                self.config_manager.update_config_value("video_background_path", None)
+            self.config_manager.update_config_value("image_background_path", filename)
+            self.update_display_immediately()
+
+    def clear_image_background(self):
+        """Clear image background"""
+        self.image_bg_path_var.set("None")
+        self.config_manager.update_config_value("image_background_path", None)
         self.update_display_immediately()
 
     def set_active_module(self, module_name):
@@ -1245,6 +1615,7 @@ class LCDController:
                 date_format = conf.get("format", "%d-%m-%Y")  # This should use saved format
                 try:
                     text = datetime.now().strftime(date_format)
+                    text = text.replace('\\n', '\n')
                 except Exception:
                     text = datetime.now().strftime("%d-%m-%Y")
 
@@ -1264,6 +1635,10 @@ class LCDController:
             return default
 
     def get_display_text_for_metric(self, metric, info):
+        # Check if we're using a vendor image that already includes labels/units
+        bg_path = self.config_manager.get_config().get("image_background_path") or ""
+        skip_formatting = any(tag in bg_path for tag in ["/002", "/vendor/"]) if bg_path else False
+
         # Handle special cases first (non-numeric or special formatting)
         if metric == "time":
             return datetime.now().strftime("%H:%M")
@@ -1274,6 +1649,10 @@ class LCDController:
 
         # Handle all numeric metrics with appropriate units and formatting
         value = self.safe_number(info.get(metric, 0))
+
+        # If vendor image has text already, just return plain numbers
+        if skip_formatting:
+            return f"{value:.0f}"
 
         # Define formatting rules for different metric types
         metric_formats = {
@@ -1311,6 +1690,14 @@ class LCDController:
     def sync_items_to_config(self):
         config = self.config_manager.get_config()
         for tag, item in self.draggable_items.items():
+            current_enabled = config.get(tag, {}).get("enabled", True)
+            self.config_manager.update_config_value(f"{tag}.x", item.x)
+            self.config_manager.update_config_value(f"{tag}.y", item.y)
+            self.config_manager.update_config_value(f"{tag}.font", item.font_config)
+            self.config_manager.update_config_value(f"{tag}.color", item.color)
+            self.config_manager.update_config_value(f"{tag}.enabled", current_enabled)
+            if tag in ("cpu_label", "gpu_label", "custom"):
+                self.config_manager.update_config_value(f"{tag}.text", item.text)
             conf = config.setdefault(tag, {})
             conf.update({
                 "x": item.x,
@@ -1369,8 +1756,10 @@ class LCDController:
         try:
             config = self.config_manager.get_config()
 
-            bg_path = config.get("background_path") or ""
-            bg_img = self.bg_manager.get_background_bytes(bg_path)
+            bg_video_path = self.config_manager.get_config().get("video_background_path") or ""
+            bg_image_path = self.config_manager.get_config().get("image_background_path") or ""
+
+            bg_img = self.bg_manager.get_background_bytes(bg_video_path, bg_image_path)
             if bg_img is not None:
                 img = Image.frombytes("RGB", (320, 240), bg_img)
             else:
@@ -1406,10 +1795,12 @@ class LCDController:
 
     def render_background(self):
         """Fetch and return just the background image (PIL.Image)."""
-        bg_path = self.config_manager.get_config().get("background_path") or ""
-        bg_img = self.bg_manager.get_background_bytes(bg_path)
+        bg_video_path = self.config_manager.get_config().get("video_background_path") or ""
+        bg_image_path = self.config_manager.get_config().get("image_background_path") or ""
+
+        bg_img = self.bg_manager.get_background_bytes(bg_video_path, bg_image_path)
     
-        if bg_img and len(bg_img) == 320 * 240 * 3:
+        if bg_img:
             img = Image.frombytes("RGB", (320, 240), bg_img)
         else:
             img = Image.new("RGB", (320, 240), "black")
@@ -1442,6 +1833,7 @@ class LCDController:
             fmt = date_conf.get("format", "%d-%m-%Y")
             try:
                 text_updates["date"] = now.strftime(fmt)
+                text_updates["date"] = text_updates["date"].replace('\\n', '\n')
             except Exception:
                 text_updates["date"] = now.strftime("%d-%m-%Y")
 
@@ -1502,6 +1894,7 @@ class LCDController:
                 fmt = date_conf.get("format", "%d-%m-%Y")
                 try:
                     text_updates["date"] = now.strftime(fmt)
+                    text_updates["date"] = text_updates["date"].replace('\\n', '\n')
                 except Exception:
                     text_updates["date"] = now.strftime("%d-%m-%Y")
 
@@ -1525,7 +1918,7 @@ class LCDController:
             self.cached_metrics = text_updates
             self.last_metrics_update = now
 
-    # Draw cached metrics
+        # Draw cached metrics
         draw = ImageDraw.Draw(img)
         # Push updates to draggable items
         for tag, text in self.cached_metrics.items():
@@ -1536,10 +1929,33 @@ class LCDController:
             if self.is_item_visible(tag, config):
                 item.draw(draw)
         try:
-            lcd_driver.update_lcd_image(img.tobytes())
+            self.usb_ok = lcd_driver.update_lcd_image(img.tobytes())
+            if not self.usb_ok:
+                # Pause all updates
+                self._paused.clear()
+                # Show blocking messagebox in main thread
+                self.root.after(0, self._show_usb_error_and_wait)
         except:
             exit(1)
         return img
+    
+    def _show_usb_error_and_wait(self):
+        """Show error dialog and wait for user to click OK"""
+        # Ensure window is visible and focused
+        try:
+            self.root.deiconify()     # show if hidden
+            self.root.lift()          # bring to front
+            self.root.focus_force()   # grab focus
+        except Exception:
+            pass
+        messagebox.showerror("TR Driver", "LCD communication failed. Click OK when LCD is ready")
+        if not lcd_driver.init_dev():
+            messagebox.showerror("TR Driver", "Failed to initialize USB device")
+            exit(1)
+        # Resume updates after OK is clicked
+        self._paused.set()
+        # Trigger immediate update
+        self.update_display_immediately()
 
     def draw_preview(self, img):
         """Update preview canvas (must be main thread)."""
@@ -1547,8 +1963,6 @@ class LCDController:
         self.lcd_canvas.delete("lcd_image")
         self.lcd_canvas.create_image(0, 0, image=self.tk_lcd_image, anchor="nw", tags="lcd_image")
 
-    def save_config(self):
-        self.config_manager.save_config(self.config_file)
 
     def update_display_immediately(self):
         """Request a display update in the background thread."""
@@ -1562,9 +1976,18 @@ class LCDController:
 
 
     def _update_worker(self):
-        while True:
-            self._update_queue.get()
+        while not self._stop_threads.is_set():
             try:
+                # Wait for update request with timeout to check stop flag
+                try:
+                    self._update_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                
+                # Wait if paused
+                if not self._paused.wait(timeout=0.1):
+                    continue
+                    
                 start = time.perf_counter()
 
                 img = self.render_lcd_image()  # heavy (PIL + USB)
@@ -1591,14 +2014,17 @@ class LCDController:
         self.sync_items_to_config()
         self.config_manager.save_config(self.config_file)
 
+
     def start_data_updates(self):
         self.is_obscured = False
         self.is_minimized = False
-        self.has_focus = True
+        self.has_focus = True   
         self.is_mapped = True
+        self._lcd_timer_id = None  # Track timer ID for cancellation
+        self._gui_poll_id = None   # Track GUI poll timer ID
 
         # Bind multiple state detection events
-        self.root.bind('<Visibility>', self.on_visibility_change)
+        # self.root.bind('<Visibility>', self.on_visibility_change)
         self.root.bind('<FocusIn>', self.on_focus_in)
         self.root.bind('<FocusOut>', self.on_focus_out)
         self.root.bind('<Map>', self.on_map)
@@ -1606,20 +2032,29 @@ class LCDController:
 
         # Start the LCD update timer (always 40ms)
         def lcd_update():
+            if not self._paused.is_set():
+                # Paused, skip this update but reschedule
+                self._lcd_timer_id = self.root.after(40, lcd_update)
+                return
+                
             if not self.updating_gui:
                 try:
                     self.update_display_immediately()
                 except Exception as e:
-                    print(f"LCD update error: {e}")
-
+                    pass
             # Always schedule next LCD update at 40ms
-            self.root.after(40, lcd_update)
+            self._lcd_timer_id = self.root.after(40, lcd_update)
 
         previous_interval = None
         last_slow_time = 0  # Track when we last went to slow refresh
         first_poll = True  # Flag for first poll
 
         def gui_poll():
+            if not self._paused.is_set():
+                # Paused, reschedule with longer delay
+                self._gui_poll_id = self.root.after(200, gui_poll)
+                return
+                
             nonlocal previous_interval, last_slow_time, first_poll
             try:
                 # Check focus
@@ -1648,7 +2083,7 @@ class LCDController:
                     last_slow_time = current_time
                 else:
                     # If we recently switched to slow polling, stay slow for a bit
-                    if current_time - last_slow_time < 2.0:  # 2 second grace period
+                    if current_time - last_slow_time < 1.0:  # 1 second grace period
                         interval = 200
                         self.gui_should_update = False
                     else:
@@ -1662,23 +2097,12 @@ class LCDController:
             if interval != previous_interval:
                 previous_interval = interval
 
-            self.root.after(interval, gui_poll)
+            self._gui_poll_id = self.root.after(interval, gui_poll)
 
         # Start both timers
         lcd_update()
         gui_poll()
 
-    def on_visibility_change(self, event):
-        """Called when window visibility changes"""
-        # VisibilityUnobscured = 0, VisibilityPartiallyObscured = 1, VisibilityFullyObscured = 2
-        if hasattr(event, 'state'):
-            if event.state == 'VisibilityFullyObscured':
-                self.is_obscured = True
-            else:
-                self.is_obscured = False
-        else:
-            # Fallback: check the string representation
-            self.is_obscured = (str(event.state) == 'VisibilityFullyObscured')
 
     def on_focus_in(self, event):
         """Called when window gains focus"""
@@ -1707,19 +2131,118 @@ class LCDController:
         if widget_str == ".":
             self.is_mapped = False
             self.is_minimized = True
+    
+    def cleanup(self):
+        """Stop all threads and timers gracefully"""
+        # Cancel timers
+        if hasattr(self, '_lcd_timer_id') and self._lcd_timer_id:
+            try:
+                self.root.after_cancel(self._lcd_timer_id)
+            except:
+                pass
+        
+        if hasattr(self, '_gui_poll_id') and self._gui_poll_id:
+            try:
+                self.root.after_cancel(self._gui_poll_id)
+            except:
+                pass
+        
+        # Stop threads
+        self._stop_threads.set()
+        self._paused.set()  # Unpause so thread can exit
+        
+        # Wait for thread to finish (with timeout)
+        if self._update_thread.is_alive():
+            self._update_thread.join(timeout=1.0)
 
 
 if __name__ == "__main__":
+    import threading
+    from PIL import Image
+    import pystray
 
     if not lcd_driver.init_dev():
-        messagebox.showerror("USB LCD", "Failed to initialize USB device")
+        messagebox.showerror("TR Driver", "Failed to initialize USB device")
         exit(1)
 
-    root = tk.Tk()
+    root = tk.Tk(className="tr-driver")
+    root.title("TR Driver")
+
+    try:
+        root.tk.call('wm', 'attributes', root._w, '-class', 'tr-driver')
+    except Exception:
+        pass
+
+    possible_icons = [
+        "/usr/share/icons/hicolor/256x256/apps/tr-driver.png",   # installed
+        os.path.join(os.path.dirname(__file__), "tr-driver.png"),  # dev/build dir
+        os.path.join(os.path.dirname(__file__), "../tr-driver.png")  # fallback
+    ]
+
+    app_icon_path = None
+    for icon_path in possible_icons:
+        if os.path.exists(icon_path):
+            try:
+                root.iconphoto(False, tk.PhotoImage(file=icon_path))
+                app_icon_path = icon_path
+                break
+            except Exception as e:
+                print(f"Warning: could not set iconphoto: {e}", file=sys.stderr)
 
     app = LCDController(root)
+
+    # --- System tray support ---
+    tray_icon = None
+    first_close = True
+
+    def show_window(icon=None, item=None):
+        """Restore the main window from the tray."""
+        global tray_icon
+        if tray_icon:
+            tray_icon.stop()
+            tray_icon = None
+        root.deiconify()
+        root.lift()
+        root.focus_force()
+
+    def quit_app(icon=None, item=None):
+        """Exit cleanly."""
+        if icon:
+            icon.stop()
+        root.after(0, root.destroy)
+
+    def hide_window(*_):
+        """Hide the window and show tray icon."""
+        global tray_icon
+        global first_close
+        if first_close:
+            messagebox.showinfo("TR Driver", "Program will run in the background. Use the tray menu to quit")
+            first_close = False
+        root.withdraw()
+
+        def _run_tray():
+            global tray_icon
+            image = Image.open(app_icon_path) if app_icon_path else None
+            menu = pystray.Menu(
+                pystray.MenuItem("Open", show_window),
+                pystray.MenuItem("Exit", quit_app)
+            )
+            tray_icon = pystray.Icon("tr-driver", image, "TR Driver", menu)
+            tray_icon.run()
+
+        threading.Thread(target=_run_tray, daemon=True).start()
+
+    # When user clicks the close button:
+    root.protocol("WM_DELETE_WINDOW", hide_window)
+
+    # Optional: also hide when minimized
+    def on_minimize(event):
+        if root.state() == "iconic":
+            hide_window()
+    root.bind("<Unmap>", on_minimize)
+
     try:
         root.mainloop()
     finally:
-        # Clean up on exit
+        app.cleanup()
         lcd_driver.cleanup_dev()
