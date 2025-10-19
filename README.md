@@ -21,7 +21,8 @@ You can download the latest AppImage directly from the [**Releases**](https://gi
 ```bash
 wget https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest/download/tr-driver-x86_64.AppImage
 chmod +x tr-driver-x86_64.AppImage
-./tr-driver-x86_64.AppImage```
+./tr-driver-x86_64.AppImage
+```
 
 
 That’s it — no installation required!
