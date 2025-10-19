@@ -1,7 +1,7 @@
-# LCD System Monitor (Linux Driver + GUI)
-
-## 📖 Overview
-This project provides a **Linux backend driver** (in C++) and a **Python GUI frontend** for controlling and displaying system info on a USB-connected LCD device.  
+# LCD System Monitor (Linux Driver + GUI) 
+[![Build AppImage](https://github.com/the-black-eagle/Thermalright-usblcd/actions/workflows/build-appimage.yml/badge.svg)](https://github.com/the-black-eagle/Thermalright-usblcd/actions/workflows/build-appimage.yml)
+[![Latest Release](https://img.shields.io/github/v/release/the-black-eagle/Thermalright-usblcd?label=Latest%20AppImage&logo=github)](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest)
+[![License](https://img.shields.io/github/license/the-black-eagle/Thermalright-usblcd)](LICENSE)
 
 This driver is specifically for the Thermalright LCD that idetifies itself as **ALi Corp. USBLCD** and has vid of 0402 and a pid of 3922.  It will not drive any other
 Thermalright LCD's.  Thermalright have no intentions of providing a Linux driver (because I asked them) so I did it myself.  The result is as close to the original as I could get.  The program can display static or video images oon the LCD.  If you use static images with transparency (alpha channel) and then load a video, the video will play in the alpha channel of the image.
