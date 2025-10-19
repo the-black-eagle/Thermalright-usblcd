@@ -1,0 +1,84 @@
+name: Build AppImage
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          g++ \
+          python3-dev \
+          python3-pip \
+          libopencv-dev \
+          libusb-1.0-0-dev \
+          pybind11-dev \
+          nlohmann-json3-dev \
+          pkg-config \
+          wget
+        
+        # Install Python dependencies
+        pip3 install pyinstaller pillow pystray
+    
+    - name: Download appimagetool
+      run: |
+        wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+        chmod +x appimagetool-x86_64.AppImage
+        sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
+    
+    - name: Build project
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make lcd_driver
+        make appimage
+    
+    - name: Extract version from changelog
+      id: version
+      run: |
+        VERSION=$(head -n1 debian/changelog | awk '{print $2}' | tr -d '()')
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Detected version: ${VERSION}"
+    
+    - name: List generated files
+      run: |
+        ls -lh build/*.AppImage
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: build/tr-driver-*.AppImage
+        body: |
+          ## LCD System Monitor Release ${{ steps.version.outputs.version }}
+          
+          ### Installation
+          1. Download the AppImage file below
+          2. Make it executable: `chmod +x tr-driver-*.AppImage`
+          3. Run it: `./tr-driver-*.AppImage`
+          
+          ### Changes
+          See [CHANGELOG.md](CHANGELOG.md) for details.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload artifact (for non-tag pushes)
+      if: "!startsWith(github.ref, 'refs/tags/')"
+      uses: actions/upload-artifact@v3
+      with:
+        name: tr-driver-appimage
+        path: build/tr-driver-*.AppImage
+        retention-days: 30
