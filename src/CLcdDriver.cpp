@@ -1,4 +1,4 @@
-/* Copyright 2005 Gary Moore (g.moore(AT)gmx.co.uk)
+/* Copyright 2025 the-black-eagle (18698554+the-black-eagle@users.noreply.github.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -269,7 +269,6 @@ void SystemInfoPoller::load_nvml()
 
   if (!nvml_handle)
   {
-    std::cout << "NVML library not found, NVIDIA GPU stats will be unavailable\n";
     return;
   }
 
@@ -299,13 +298,11 @@ void SystemInfoPoller::load_nvml()
   // Initialize NVML
   if (nvmlInit && nvmlInit() != NVML_SUCCESS)
   {
-    std::cout << "Failed to initialize NVML\n";
     dlclose(nvml_handle);
     nvml_handle = nullptr;
   }
   else if (nvmlInit)
   {
-    std::cout << "NVML loaded successfully\n";
   }
 }
 
@@ -419,10 +416,10 @@ std::pair<double, double> SystemInfoPoller::get_memory_info()
 
   if (mem_total > 0)
   {
-  long long mem_used = mem_total - mem_available;
-  double mem_percent = (static_cast<double>(mem_used) / mem_total) * 100.0;
-  double mem_used_gb = (mem_used * 1024.0) / (1024.0 * 1024.0 * 1024.0); // KB to GB
-  return {mem_percent, mem_used_gb};
+    long long mem_used = mem_total - mem_available;
+    double mem_percent = (static_cast<double>(mem_used) / mem_total) * 100.0;
+    double mem_used_gb = (mem_used * 1024.0) / (1024.0 * 1024.0 * 1024.0); // KB to GB
+    return {mem_percent, mem_used_gb};
   }
 
   return {0.0, 0.0};
@@ -822,7 +819,7 @@ static libusb_device_handle* open_dev(uint16_t vid_want,
     }
   }
   libusb_free_device_list(devs, 1);
-  throw std::runtime_error("Device not found");
+  return nullptr;
 }
 
 } // namespace
@@ -1002,8 +999,8 @@ bool handshake_with_device()
         }
         else
         {
-          scsi_log(
-              "[HANDSHAKE] Malformed/empty Request Sense -> resetting transport and continuing");
+          scsi_log("[HANDSHAKE] Malformed/empty Request Sense -> resetting "
+                   "transport and continuing");
           reset_transport();
         }
       }
@@ -1023,7 +1020,8 @@ bool handshake_with_device()
           ScsiResult sense2 = send_scsi_command(_dev, sense_cdb, {}, 18);
           if (sense2.data.size() < 14)
           {
-            scsi_log("[HANDSHAKE] Malformed Request Sense after Mode Sense -> resetting transport");
+            scsi_log("[HANDSHAKE] Malformed Request Sense after Mode Sense -> "
+                     "resetting transport");
             reset_transport();
           }
         }
@@ -1045,29 +1043,30 @@ bool handshake_with_device()
     return false;
   }
 
-  // ---------------- Stage 2: Inquiry -> APIX probe -> full payload ----------------
+  // ---------------- Stage 2: Inquiry -> APIX probe -> full payload
+  // ----------------
   scsi_log("[HANDSHAKE] Stage 2: TUR + Sense + Inquiry + APIX sequence");
 
   try
   {
     //// TUR first
-    //scsi_log("[HANDSHAKE] Sending TUR...");
-    //ScsiResult tur = send_scsi_command(_dev, tur_cdb, {}, 0);
-    //scsi_log("[HANDSHAKE] TUR ok=" + std::to_string(tur.ok));
+    // scsi_log("[HANDSHAKE] Sending TUR...");
+    // ScsiResult tur = send_scsi_command(_dev, tur_cdb, {}, 0);
+    // scsi_log("[HANDSHAKE] TUR ok=" + std::to_string(tur.ok));
 
-    //if (!tur.ok)
+    // if (!tur.ok)
     //{
-    //scsi_log("[HANDSHAKE] TUR failed, sending Request Sense...");
-    //ScsiResult sense = send_scsi_command(_dev, sense_cdb, {}, 18);
-    //if (!sense.data.empty() && sense.data.size() >= 14)
+    // scsi_log("[HANDSHAKE] TUR failed, sending Request Sense...");
+    // ScsiResult sense = send_scsi_command(_dev, sense_cdb, {}, 18);
+    // if (!sense.data.empty() && sense.data.size() >= 14)
     //{
-    //uint8_t key = sense.data[2] & 0x0F;
-    //uint8_t asc = sense.data[12];
-    //uint8_t ascq = sense.data[13];
-    //scsi_log("[HANDSHAKE] Sense key=" + std::to_string(key) + " ASC=0x" + hex_str(asc) +
-    //" ASCQ=0x" + hex_str(ascq));
-    //}
-    //}
+    // uint8_t key = sense.data[2] & 0x0F;
+    // uint8_t asc = sense.data[12];
+    // uint8_t ascq = sense.data[13];
+    // scsi_log("[HANDSHAKE] Sense key=" + std::to_string(key) + " ASC=0x" +
+    // hex_str(asc) + " ASCQ=0x" + hex_str(ascq));
+    // }
+    // }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
@@ -1135,7 +1134,7 @@ bool device_ready()
   // TEST UNIT READY
   std::vector<uint8_t> tur_cdb(6, 0x00);
   auto res = send_scsi_command(_dev, tur_cdb, {}, 0);
-  //log_sense(res);
+  // log_sense(res);
 
   if (res.ok)
   {
@@ -1147,16 +1146,13 @@ bool device_ready()
     // REQUEST SENSE
     std::vector<uint8_t> sense_cdb = {0x03, 0, 0, 0, 18, 0};
     auto sense = send_scsi_command(_dev, sense_cdb, {}, 18);
-    //log_sense(sense);
-    std::cerr << "Sense data size (" << (int)sense.data.size() << ")\n";
+    // log_sense(sense);
 
     if (sense.data.size() >= 14)
     {
       uint8_t key = sense.data[2] & 0x0F;
       uint8_t asc = sense.data[12];
       uint8_t ascq = sense.data[13];
-      std::cerr << "Sense key=" << (int)key << " ASC=0x" << std::hex << (int)asc << " ASCQ=0x"
-                << (int)ascq << std::dec << "\n";
     }
 
     // Perform BOT reset + clear halt (like Windows)
@@ -1169,7 +1165,6 @@ bool device_ready()
                                      0, 1000);
     if (rc < 0)
     {
-      std::cerr << "Mass Storage Reset failed: " << rc << "\n";
     }
 
     libusb_clear_halt(_dev, 0x81); // bulk IN
@@ -1182,10 +1177,8 @@ bool device_ready()
     libusb_control_transfer(_dev, 0x21, 0xFF, 0, 0, 0, 0, 1000);
     libusb_clear_halt(_dev, 0x81);
     libusb_clear_halt(_dev, 0x02);
-    std::cerr << "Phase Error, resetting transport\n";
     return false;
   }
-  std::cerr << "Unhandled Error at end of routine\n";
   return false;
 }
 
@@ -1193,7 +1186,7 @@ void reset_transport()
 {
   if (!_dev)
   {
-    throw std::runtime_error("Device not initialized");
+    return;
   }
 
   // Mass Storage Reset
@@ -1208,7 +1201,6 @@ void reset_transport()
   log << "[RESET] clear_halt OUT rc=" << rc << "\n";
 
   log.close();
-  std::cerr << "Transport reset complete\n";
 }
 
 ScsiResult send_scsi_command(libusb_device_handle* dev,
@@ -1260,7 +1252,9 @@ ScsiResult send_scsi_command(libusb_device_handle* dev,
   int rc = libusb_bulk_transfer(dev, 0x02, cbw.data(), cbw.size(), &transferred, 1000);
   if (rc != 0 || static_cast<size_t>(transferred) != cbw.size())
   {
-    throw std::runtime_error("Failed to send CBW");
+    ScsiResult blktrans;
+    blktrans.ok = false;
+    return blktrans;
   }
 
   // Data phase
@@ -1270,7 +1264,7 @@ ScsiResult send_scsi_command(libusb_device_handle* dev,
     rc = libusb_bulk_transfer(dev, 0x81, data_in.data(), data_in_len, &transferred, 2000);
     if (rc != 0)
     {
-      throw std::runtime_error("IN transfer failed");
+      ScsiResult tmpres; tmpres.ok = false; tmpres.status = 2; return tmpres;
     }
   }
   else if (!data_out.empty())
@@ -1279,7 +1273,7 @@ ScsiResult send_scsi_command(libusb_device_handle* dev,
                               &transferred, 2000);
     if (rc != 0)
     {
-      throw std::runtime_error("OUT transfer failed");
+      ScsiResult tmpres; tmpres.ok = false; tmpres.status = 2; return tmpres;
     }
   }
   ScsiResult result;
@@ -1346,7 +1340,7 @@ ScsiResult send_scsi_command(libusb_device_handle* dev,
   return result;
 }
 
-void update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev)
+bool update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev)
 {
   if (dev == nullptr)
   {
@@ -1354,7 +1348,7 @@ void update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev)
   }
   if (dev == nullptr)
   {
-    throw std::runtime_error("No LCD device available.");
+    return false;
   }
 
   // Convert to chunks of RGB565
@@ -1375,16 +1369,16 @@ void update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev)
     cdb[14] = (length >> 16) & 0xFF;
     cdb[15] = (length >> 24) & 0xFF;
 
-    try
     {
-      send_scsi_command(dev, cdb, chunks[idx]);
-    }
-    catch (const std::exception& e)
-    {
-      throw std::runtime_error(std::string("LCD update failed on chunk ") + std::to_string(idx) +
-                               ": " + e.what());
+      ScsiResult res = send_scsi_command(dev, cdb, chunks[idx]);
+      if (!res.ok) {
+        // USB transfer failed for this chunk — signal failure to caller
+        return false;
+      }
     }
   }
+    // All chunks sent successfully
+    return true;
 }
 
 // --- ImageConverter ---
@@ -1426,14 +1420,27 @@ std::array<std::vector<uint8_t>, 3> ImageConverter::image_to_rgb565_chunks(
   return chunks;
 }
 
+void BackgroundManager::set_background_paths(const std::string& image, const std::string& video)
+{
+  image_path = image;
+  video_path = video;
+}
+
 cv::Mat BackgroundManager::create_default_background()
 {
   if (default_bg.empty())
   {
-    default_bg = cv::Mat(240, 320, CV_8UC3, cv::Scalar(20, 40, 20));
+    default_bg = cv::Mat(240, 320, CV_8UC3);
     for (int y = 0; y < 240; ++y)
     {
-      int val = static_cast<int>(20 + (y / 240.0) * 40);
+      // Use floating point for smoother gradient
+      double ratio = y / 240.0;
+      int val = static_cast<int>(20 + ratio * 40);
+
+      // Add slight noise/dithering to break up banding
+      int noise = (y % 3) - 1; // -1, 0, or 1
+      val = std::max(0, std::min(255, val + noise));
+
       cv::line(default_bg, cv::Point(0, y), cv::Point(320, y), cv::Scalar(val, val / 2, val));
     }
   }
@@ -1453,18 +1460,13 @@ cv::Mat BackgroundManager::load_static_background(const std::string& background_
   {
     try
     {
-      cv::Mat img = cv::imread(background_path);
+      cv::Mat img = cv::imread(background_path, cv::IMREAD_UNCHANGED);
       if (img.empty())
       {
         return cv::Mat();
       }
-      // Convert RGBA to RGB (remove alpha channel)
-      if (img.channels() == 4)
-      {
-        cv::Mat rgb_img;
-        cv::cvtColor(img, rgb_img, cv::COLOR_BGRA2BGR);
-        img = rgb_img;
-      }
+      has_alpha = (img.channels() == 4);
+
       cv::resize(img, img, cv::Size(320, 240));
       static_bg = img;
       static_bg_path = background_path;
@@ -1472,70 +1474,130 @@ cv::Mat BackgroundManager::load_static_background(const std::string& background_
     }
     catch (const std::exception& e)
     {
-      std::cerr << "Error loading background: " << e.what() << std::endl;
       return cv::Mat();
     }
   }
   return static_bg.clone();
 }
 
-cv::Mat BackgroundManager::get_background(const std::string& background_path)
+cv::Mat BackgroundManager::get_background(const std::string& video_path,
+                                          const std::string& image_path)
 {
-  if (!background_path.empty())
+  cv::Mat img, vid;
+
+  // --- 1️⃣ Load static image (if configured) ---
+  if (!image_path.empty())
   {
-    // Detect if it's a video file by extension
-    std::string ext = std::filesystem::path(background_path).extension().string();
+    img = load_static_background(image_path);
+    //has_alpha = (img.channels() == 4);
+  }
+
+  // --- 2️⃣ Load or update video background (if configured) ---
+  if (!video_path.empty())
+  {
+    std::string ext = std::filesystem::path(video_path).extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
     if (ext == ".mp4" || ext == ".avi" || ext == ".mov" || ext == ".mkv")
     {
-      // If we don’t already have a video background for this file, make one
-      if (!video_bg || video_bg->get_path() != background_path)
+      if (!video_bg || video_bg->get_path() != video_path)
       {
         if (video_bg)
-        {
           video_bg->stop();
-        }
-        video_bg = std::make_unique<VideoBackground>(background_path, "loop", 24);
+
+        video_bg = std::make_unique<VideoBackground>(video_path, "loop", 24);
         video_bg->start_playback();
       }
-      return video_bg->get_current_frame();
+      vid = video_bg->get_current_frame();
     }
-
-    // Otherwise treat it as a static image
-    cv::Mat bg = load_static_background(background_path);
-    if (!bg.empty())
-      return bg;
   }
 
-  // Fallback: default background
+  // --- 3️⃣ Combined content (image + video) ---
+  if (!img.empty() && !vid.empty())
+  {
+    if (vid.size() != img.size())
+      cv::resize(vid, vid, img.size());
+    if (has_alpha)
+      return compose_with_video(img, vid);
+    else
+      return img; // image overrides but no alpha blending
+  }
+
+  // --- 4️⃣ Video only ---
+  if (!vid.empty())
+    return vid;
+
+  // --- 5️⃣ Static only ---
+  if (!img.empty())
+    return img;
+
+  // --- 6️⃣ Fallback ---
   return create_default_background();
 }
 
-std::vector<uint8_t> BackgroundManager::get_background_bytes(const std::string& background_path)
+cv::Mat BackgroundManager::compose_with_video(const cv::Mat& argb_image, const cv::Mat& video_frame)
 {
-  cv::Mat bg = get_background(background_path);
+  if (argb_image.empty() || video_frame.empty())
+    return argb_image;
+
+  // --- Ensure same size ---
+  cv::Mat resized_video;
+  if (video_frame.size() != argb_image.size())
+    cv::resize(video_frame, resized_video, argb_image.size());
+  else
+    resized_video = video_frame;
+
+  // --- Split alpha ---
+  std::vector<cv::Mat> channels;
+  cv::split(argb_image, channels); // B, G, R, A
+  cv::Mat alpha = channels[3];
+
+  // --- Extract BGR (drop alpha) ---
+  cv::Mat fg_bgr;
+  cv::merge(std::vector<cv::Mat>{channels[0], channels[1], channels[2]}, fg_bgr);
+
+  // --- Convert to float and normalize ---
+  cv::Mat fg_f, bg_f, alpha_f;
+  fg_bgr.convertTo(fg_f, CV_32FC3, 1.0 / 255.0);
+  resized_video.convertTo(bg_f, CV_32FC3, 1.0 / 255.0);
+  alpha.convertTo(alpha_f, CV_32FC1, 1.0 / 255.0);
+
+  // --- Expand alpha to 3 channels ---
+  cv::Mat alpha_3c;
+  cv::merge(std::vector<cv::Mat>{alpha_f, alpha_f, alpha_f}, alpha_3c);
+
+  // --- Blend in BGR space ---
+  cv::Mat inv_alpha_3c;
+  cv::subtract(cv::Scalar(1.0, 1.0, 1.0), alpha_3c, inv_alpha_3c);
+  cv::Mat blended_f = fg_f.mul(alpha_3c) + bg_f.mul(inv_alpha_3c);
+
+  // --- Convert back to 8-bit BGRA ---
+  cv::Mat blended_bgr, blended_bgra;
+  blended_f.convertTo(blended_bgr, CV_8UC3, 255.0);
+  cv::cvtColor(blended_bgr, blended_bgra, cv::COLOR_BGR2BGRA);
+
+  // --- Set full alpha ---
+  std::vector<cv::Mat> final_channels;
+  cv::split(blended_bgra, final_channels);
+  final_channels[3] = cv::Mat(argb_image.size(), CV_8UC1, cv::Scalar(255));
+  cv::merge(final_channels, blended_bgra);
+
+  return blended_bgra;
+}
+
+std::vector<uint8_t> BackgroundManager::get_background_bytes(const std::string& video_path,
+                                                             const std::string& image_path)
+{
+  cv::Mat bg = get_background(video_path, image_path);
   if (bg.empty())
   {
-    std::cout << "get_background returned empty Mat!" << std::endl;
     return std::vector<uint8_t>();
   }
 
   cv::Mat bytes_mat;
 
-  std::string ext = std::filesystem::path(background_path).extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-  if (ext == ".mp4" || ext == ".avi" || ext == ".mov" || ext == ".mkv")
-  {
-    // Already RGB
-    bytes_mat = bg;
-  }
-  else
-  {
-    // Convert static BGR image to RGB
-    cv::cvtColor(bg, bytes_mat, cv::COLOR_BGR2RGB);
-  }
+  // Convert static BGR image to RGB
+  cv::cvtColor(bg, bytes_mat, cv::COLOR_BGRA2RGB);
 
   // Convert to raw bytes (same as PIL's .tobytes())
   std::vector<uint8_t> bytes;
@@ -1577,7 +1639,6 @@ void VideoBackground::_init()
   cap.open(path);
   if (!cap.isOpened())
   {
-    std::cerr << "VideoBackground: error opening video file: " << path << std::endl;
     return;
   }
 
@@ -1590,15 +1651,12 @@ void VideoBackground::_init()
     // Stream mode
     _streaming = true;
     _fps = (fps > 0) ? static_cast<int>(fps) : _fps;
-    std::cout << "VideoBackground: using streaming mode (" << duration_sec << "s)" << std::endl;
   }
   else
   {
     // Preload mode
     _preload_frames();
     _streaming = false;
-    std::cout << "VideoBackground: preloaded " << _frames.size() << " frames (" << duration_sec
-              << "s)" << std::endl;
   }
 }
 
@@ -1633,10 +1691,9 @@ void VideoBackground::_preload_frames()
   {
     if (frame.empty())
       break;
-    cv::Mat resized, rgb;
+    cv::Mat resized;
     cv::resize(frame, resized, cv::Size(320, 240), 0, 0, cv::INTER_LANCZOS4);
-    cv::cvtColor(resized, rgb, cv::COLOR_BGR2RGB);
-    _frames.push_back(rgb.clone());
+    _frames.push_back(resized.clone());
   }
   cap.release();
 }
@@ -1667,13 +1724,12 @@ void VideoBackground::_stream_loop()
       continue;
     }
 
-    cv::Mat resized, rgb;
+    cv::Mat resized;
     cv::resize(frame, resized, cv::Size(320, 240), 0, 0, cv::INTER_LANCZOS4);
-    cv::cvtColor(resized, rgb, cv::COLOR_BGR2RGB);
 
     {
       std::lock_guard<std::mutex> lock(_lock);
-      _current_frame = rgb.clone();
+      _current_frame = resized.clone();
     }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(delay));
@@ -1838,7 +1894,6 @@ bool ConfigManager::load_config(const std::string& path)
     }
     catch (const std::exception& e)
     {
-      std::cout << "Error loading config: " << e.what() << std::endl;
       return false;
     }
   }

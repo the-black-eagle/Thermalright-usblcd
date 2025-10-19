@@ -1,4 +1,4 @@
-/* Copyright 2005 Gary Moore (g.moore(AT)gmx.co.uk)
+/* Copyright 2025 the-black-eagle (18698554+the-black-eagle@users.noreply.github.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -188,19 +188,23 @@ private:
 class BackgroundManager
 {
 public:
-  BackgroundManager() : static_bg_path(""), static_bg_mtime(0) {}
-  std::vector<uint8_t> get_background_bytes(const std::string& background_path = "");
+  std::vector<uint8_t> get_background_bytes(const std::string& video_path = "", const std::string& image_path = "");
 
 private:
   cv::Mat create_default_background();
+  void set_background_paths(const std::string& image, const std::string& video);
   cv::Mat load_static_background(const std::string& background_path);
-  cv::Mat get_background(const std::string& background_path = "");
+  cv::Mat get_background(const std::string& video_path = "", const std::string& image_path= "");
+  cv::Mat compose_with_video(const cv::Mat &argb_image, const cv::Mat &video_frame);
 
   cv::Mat static_bg;
   std::string static_bg_path;
   std::time_t static_bg_mtime;
   std::unique_ptr<VideoBackground> video_bg = nullptr;
   cv::Mat default_bg;
+  bool has_alpha = false;
+  std::string image_path;
+  std::string video_path;
 };
 
 class ConfigManager {
@@ -250,7 +254,7 @@ void log_sense(const ScsiResult& result);
 //internal routines
 
 BackgroundManager& get_background_manager();
-void update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev = nullptr);
+bool update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev = nullptr);
 ScsiResult send_scsi_command(libusb_device_handle* dev,
                              const std::vector<uint8_t>& cdb,
                              const std::vector<uint8_t>& data_out = {},
