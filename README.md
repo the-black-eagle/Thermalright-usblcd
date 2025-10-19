@@ -4,10 +4,21 @@
 This project provides a **Linux backend driver** (in C++) and a **Python GUI frontend** for controlling and displaying system info on a USB-connected LCD device.  
 
 This driver is specifically for the Thermalright LCD that idetifies itself as **ALi Corp. USBLCD** and has vid of 0402 and a pid of 3922.  It will not drive any other
-Thermalright LCD's.  Thermalright have no intentions of providing a Linux driver (because I asked them) so I did it myself.
+Thermalright LCD's.  Thermalright have no intentions of providing a Linux driver (because I asked them) so I did it myself.  The result is as close to the original as I could get.  The program can display static or video images oon the LCD.  If you use static images with transparency (alpha channel) and then load a video, the video will play in the alpha channel of the image.
+
+Date and time formatting follows standard %y-%m formatting etc but can include `\n` for new lines which is used in some of the provided images to stack the day on top of the date.
+
+Most of the preview images have been edited from the originals supplied by ThermalRight to better fit Linux and this project, although some do still contain the Vendor name and some chinese text.  This is only in the media selector though, the actual loaded image will not contain that.
+Videos have been copied `as is` from the vendor website.  Their original downloads them on demand.  Images, videos and the config files for the images can be found in the **USBLCD** directory.
+
+Program can be sent to the systray by clicking the close box and will continue to run in the background.  The GUI will not be updated in this case, just your LCD.
 
 This project is a work in progress but it is stable enough now to be used with one caveat - I have not yet figured out how to interrupt the start-up animation, so
-users need to wait for the LCD to time out ~1 minute.  There is some code in the driver to do the initial handshake but it's not in a working state yet.
+users need to wait for the LCD to time out ~1 minute.  There is some code in the driver to do the initial handshake but it's not in a working state yet.  If the driver loses comms with the LCD for some reason (shouldn't happen but just in case), it will bring itself to the front and notify you with a message box.  Once the LCD has stopped playing it's start-up animation, click OK to resume things.  In practice, this is unlikely to happen though.
+
+### Please Note
+
+I am unable to test the nVidia or Intel stuff, so although I *think* it should work, it's totally untested!!
 
 - ✅ Native Linux replacement for the original closed-source Windows tool.  
 - ✅ Backend in C++ (handles device comms, config, frame uploads).  
