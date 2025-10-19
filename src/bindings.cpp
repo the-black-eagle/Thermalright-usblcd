@@ -32,13 +32,17 @@ PYBIND11_MODULE(lcd_driver, m) {
         .def_static("image_to_rgb565_chunks", &ImageConverter::image_to_rgb565_chunks);
         
     py::class_<BackgroundManager>(m, "BackgroundManager")
-        .def("get_background_bytes",
-        [](BackgroundManager &self, const std::string &path) {
-            auto vec = self.get_background_bytes(path);  // std::vector<uint8_t>
-            return py::bytes(reinterpret_cast<const char*>(vec.data()),
-                             vec.size());
-        },
-        py::arg("background_path") = "");
+    .def("get_background_bytes",
+         [](BackgroundManager &self,
+            const std::string &video_path,
+            const std::string &image_path)
+         {
+             auto vec = self.get_background_bytes(video_path, image_path);
+             return py::bytes(reinterpret_cast<const char *>(vec.data()),
+                              vec.size());
+         },
+         py::arg("video_path") = "",
+         py::arg("image_path") = "");
 
 
     m.def("get_background_manager", &get_background_manager, 
@@ -50,7 +54,7 @@ PYBIND11_MODULE(lcd_driver, m) {
         if (info.ndim != 1)
             throw std::runtime_error("Expected a 1D contiguous buffer");
         const uint8_t* data_ptr = static_cast<const uint8_t*>(info.ptr);
-        update_lcd_image(data_ptr); // default dev is nullptr
+        return update_lcd_image(data_ptr); // default dev is nullptr
     });
 }
 
