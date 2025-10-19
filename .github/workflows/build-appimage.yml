@@ -27,7 +27,16 @@ jobs:
           pybind11-dev \
           nlohmann-json3-dev \
           pkg-config \
-          wget
+          wget \
+          git
+        
+        # Install pybind11_json (not available as Ubuntu package)
+        cd /tmp
+        git clone https://github.com/pybind/pybind11_json.git
+        cd pybind11_json
+        sudo mkdir -p /usr/local/include
+        sudo cp -r include/pybind11_json /usr/local/include/
+        cd ~
         
         # Install Python dependencies
         pip3 install pyinstaller pillow pystray
@@ -43,16 +52,20 @@ jobs:
     
     - name: Build project
       run: |
+        echo "::group::CMake Configuration"
         mkdir build
         cd build
         cmake ..
-        make lcd_driver
+        echo "::endgroup::"
         
-        # Extract appimagetool if needed (FUSE workaround)
-        cd ..
+        echo "::group::Build C++ module"
+        make lcd_driver
+        echo "::endgroup::"
+        
+        echo "::group::Build AppImage (this takes 5-10 minutes)"
         export ARCH=x86_64
-        cd build
         make appimage
+        echo "::endgroup::"
       env:
         ARCH: x86_64
     
