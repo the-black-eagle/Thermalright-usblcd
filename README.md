@@ -102,4 +102,4 @@ Further dcumentation can be found in the `docs` directory.
 
 ![Main UI](docs/screenshots/screen2.png)
 
-![Selecting a video](docs/screenshots/screen2.png)
+![Selecting a video](docs/screenshots/screen1.png)
