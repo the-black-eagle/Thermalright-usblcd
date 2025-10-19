@@ -130,10 +130,15 @@ add_custom_command(TARGET appimage POST_BUILD
     # Copy USBLCD data directory
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/tr-driver/USBLCD
 
-    # Copy desktop + icon
-    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications/${APP_NAME}.desktop -P ${APP_DESKTOP}
+    # Copy desktop file to BOTH locations (usr/share/applications AND AppDir root)
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tr-driver.desktop ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications/${APP_NAME}.desktop
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tr-driver.desktop ${CMAKE_CURRENT_BINARY_DIR}/AppDir/${APP_NAME}.desktop
+    
+    # Copy icon to multiple locations
     COMMAND ${CMAKE_COMMAND} -E copy ${APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png
     COMMAND ${CMAKE_COMMAND} -E copy ${APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/${APP_NAME}.png
+    
+    # Copy and make AppRun executable
     COMMAND ${CMAKE_COMMAND} -E copy ${APP_RUN} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/AppRun
     COMMAND chmod +x ${CMAKE_CURRENT_BINARY_DIR}/AppDir/AppRun
 
