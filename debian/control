@@ -1,0 +1,40 @@
+Source: tr-driver
+Section: utils
+Priority: optional
+Maintainer: the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.16),
+               python3-dev,
+               libusb-1.0-0-dev,
+               libopencv-dev,
+               pybind11-dev,
+               python3-pil,
+               python3-tk,
+               pkgconf
+Standards-Version: 4.6.2
+Homepage: https://github.com/the-black-eagle/Thermalright-usblcd
+Vcs-Browser: https://github.com/the-black-eagle/Thermalright-usblcd
+Vcs-Git: https://github.com/the-black-eagle/Thermalright-usblcd.git
+
+Package: tr-driver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+                    python3 (>= 3.10),
+                    python3-pil,
+                    python3-pystray,
+                    python3-opencv,
+                    python3-tk,
+                    python3-numpy,
+                    libusb-1.0-0,
+                    libopencv-core-dev,
+                    libopencv-imgproc-dev
+Description: USB LCD System Monitor Driver and GUI
+ USB LCD driver and GUI application for displaying real-time system
+ information on compatible USB LCD displays.
+ .
+ Features include:
+  - Customizable text positioning and styling
+  - CPU, GPU, memory, and disk monitoring
+  - Background image/video support
+  - Drag-and-drop interface for layout customization
+  - System tray integration with minimize-to-tray support

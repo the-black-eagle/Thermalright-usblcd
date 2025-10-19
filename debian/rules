@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+export DH_VERBOSE=0
+%:
+	dh $@
+
+OBJDIR := $(wildcard $(CURDIR)/obj-*)
+override_dh_auto_build:
+	# Build the C++ driver (.so)
+	dh_auto_build
+
+override_dh_auto_install:
+		./debian/install_tr_driver.sh
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf $(OBJDIR)/__pycache__
