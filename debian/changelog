@@ -1,0 +1,20 @@
+tr-driver (1.1.0-1) unstable; urgency=medium
+
+  * Added system tray integration using pystray
+  * Added minimize-to-tray support with tkinter window hiding
+  * Improved startup sequence and device initialization checks
+  * Updated CMakeLists.txt with PyInstaller hidden imports for pystray and tkinter
+  * Ensured consistent AppImage and Debian packaging behaviour
+  * General stability improvements and icon handling fixes
+
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Fri, 17 Oct 2025 18:30:00 +0000
+
+
+tr-driver (1.0.0-1) unstable; urgency=medium
+
+  * Initial release
+  * USB LCD driver with system monitoring
+  * Customizable GUI interface
+  * Background image/video support
+
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sun, 05 Oct 2025 12:00:00 +0000
