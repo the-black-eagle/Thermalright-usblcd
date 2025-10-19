@@ -27,16 +27,11 @@ jobs:
           pybind11-dev \
           nlohmann-json3-dev \
           pkg-config \
-          wget \
-          git
+          wget
         
-        # Install pybind11_json (not available as Ubuntu package)
-        cd /tmp
-        git clone https://github.com/pybind/pybind11_json.git
-        cd pybind11_json
-        sudo mkdir -p /usr/local/include
-        sudo cp -r include/pybind11_json /usr/local/include/
-        cd ~
+        # Install pybind11_json header (single file, not directory)
+        sudo wget -O /usr/local/include/pybind11_json.hpp \
+          https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp
         
         # Install Python dependencies
         pip3 install pyinstaller pillow pystray
