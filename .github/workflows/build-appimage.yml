@@ -3,8 +3,11 @@ name: Build AppImage
 on:
   push:
     tags:
-      - '*'  # Trigger on any tag
+      - '*'  # Trigger on any tag (with or without 'v' prefix)
   workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write  # Required for creating releases
 
 jobs:
   build:
@@ -30,8 +33,13 @@ jobs:
           wget
         
         # Install pybind11_json header (single file, not directory)
+        echo "Downloading pybind11_json.hpp..."
         sudo wget -O /usr/local/include/pybind11_json.hpp \
           https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp
+        
+        # Verify it was downloaded
+        echo "Verifying pybind11_json.hpp installation:"
+        ls -la /usr/local/include/pybind11_json.hpp
         
         # Install Python dependencies
         pip3 install pyinstaller pillow pystray
@@ -51,6 +59,11 @@ jobs:
         mkdir build
         cd build
         cmake ..
+        echo "::endgroup::"
+        
+        echo "::group::Verify include paths"
+        echo "Checking for pybind11_json.hpp:"
+        ls -la /usr/local/include/pybind11_json.hpp || echo "NOT FOUND!"
         echo "::endgroup::"
         
         echo "::group::Build C++ module"
