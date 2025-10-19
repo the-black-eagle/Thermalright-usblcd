@@ -28,6 +28,8 @@ chmod +x tr-driver-x86_64.AppImage
 That’s it — no installation required!
 The AppImage bundles all dependencies, so it runs on most modern Linux distributions. It includes 440 static images and 596 video files.
 
+### ⚙️ Driver Overview
+
 This driver is specifically for the Thermalright LCD that idetifies itself as **ALi Corp. USBLCD** and has vid of 0402 and a pid of 3922.  It will not drive any other
 Thermalright LCD's.  Thermalright have no intentions of providing a Linux driver (because I asked them) so I did it myself.  The result is as close to the original as I could get.  The program can display static or video images oon the LCD.  If you use static images with transparency (alpha channel) and then load a video, the video will play in the alpha channel of the image.
 
