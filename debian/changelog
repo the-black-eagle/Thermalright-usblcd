@@ -1,3 +1,9 @@
+tr-driver (1.1.0-2) unstable; urgency=medium
+
+  * Add to github workflows to auto-generate AppImage
+  
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sun, 19 Oct 2025 17:30:00 +0000
+
 tr-driver (1.1.0-1) unstable; urgency=medium
 
   * Added system tray integration using pystray
