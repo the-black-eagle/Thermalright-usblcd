@@ -971,7 +971,7 @@ class LCDController:
         return "unknown"
 
     def setup_ui(self):
-        self.root.title("Linux USB LCD Controller")
+        self.root.title("TR Driver")
         self.root.configure(bg="#1e1e1e")
         self.root.minsize(1200, 600)
         # Set window icon (if icon file exists)
