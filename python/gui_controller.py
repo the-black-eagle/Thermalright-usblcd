@@ -31,7 +31,7 @@ import queue
 import threading
 import lcd_driver
 from collections import deque
-
+from version import __version__
 READY_TIMEOUT = 30  # seconds
 
 
@@ -942,7 +942,7 @@ class LCDController:
         ThemedAboutBox(
             self.root,
             app_name="TR Driver",
-            version=f"1.1.0-2",
+            version=__version__,
             description=(
                 "A lightweight driver and system monitor\n"
                 "for Thermalright USB LCD displays.\n\n"
@@ -952,23 +952,6 @@ class LCDController:
             icon_path=app_icon_path
         )
 
-    def get_version_from_changelog():
-        """
-        Extracts the version string from debian/changelog.
-        Returns something like '1.2.3' or 'unknown' if not found.
-        """
-        changelog_path = os.path.join(os.path.dirname(__file__), "debian", "changelog")
-        if not os.path.exists(changelog_path):
-            return "unknown"
-
-        with open(changelog_path, "r", encoding="utf-8") as f:
-            first_line = f.readline().strip()
-
-        # Example: "tr-driver (1.0.3) unstable; urgency=medium"
-        match = re.search(r"\(([^)]+)\)", first_line)
-        if match:
-            return match.group(1)
-        return "unknown"
 
     def setup_ui(self):
         self.root.title("TR Driver")
