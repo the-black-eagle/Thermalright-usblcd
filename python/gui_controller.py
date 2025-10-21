@@ -1212,18 +1212,52 @@ class LCDController:
         self.setup_custom_text_modern(control_panel)
         self.setup_datetime_modern(control_panel)
         self.setup_system_info_modern(control_panel)
+        # --- Centered About/Quit buttons ---
+        button_row = tk.Frame(control_panel, bg="#1e1e1e")
+        button_row.pack(pady=(15, 0))  # adjust vertical spacing as needed
 
+        about_btn = tk.Button(
+            button_row,
+            text="About",
+            bg="#2196F3",
+            fg="white",
+            activebackground="#0b7dda",
+            activeforeground="white",
+            relief="flat",
+            font=("Arial", 10, "bold"),
+            cursor="hand2",
+            padx=20,
+            pady=6,
+            command=self.show_about  # you'll define this
+        )
+        about_btn.pack(side=tk.LEFT, padx=10)
+
+        quit_btn = tk.Button(
+            button_row,
+            text="Quit",
+            bg="#f44336",
+            fg="white",
+            activebackground="#da190b",
+            activeforeground="white",
+            relief="flat",
+            font=("Arial", 10, "bold"),
+            cursor="hand2",
+            padx=20,
+            pady=6,
+            command=self.root.destroy
+        )
+        quit_btn.pack(side=tk.LEFT, padx=10)
 
     def setup_secondary_control_panel(self, parent):
         """Setup right panel with background and save controls"""
         secondary_panel = tk.Frame(parent, bg="#1e1e1e")
         secondary_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 0))
-        
+
         loading_label = tk.Label(secondary_panel, text="Loading thumbnails...", 
                                 bg="#2b2b2b", fg="white", font=("Arial", 12))
         loading_label.pack(expand=True)
         secondary_panel.update()
-        
+
         # Background section
         self.setup_background_modern(secondary_panel)
 
@@ -2242,6 +2276,7 @@ if __name__ == "__main__":
         root.deiconify()
         root.lift()
         root.focus_force()
+
 
     def quit_app(icon=None, item=None):
         """Exit cleanly."""
