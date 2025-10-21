@@ -102,6 +102,17 @@ install(FILES ${APP_ICON} DESTINATION share/icons/hicolor/256x256/apps)
 # Custom Targets
 # ===============================================================
 
+# Generate version.py from debian/changelog
+add_custom_command(
+    OUTPUT ${PYTHON_DIR}/version.py
+    COMMAND ${CMAKE_COMMAND} -E echo "__version__ = \\\"${APP_VERSION}\\\"" > ${PYTHON_DIR}/version.py
+    DEPENDS ${CMAKE_SOURCE_DIR}/debian/changelog
+    COMMENT "Generating version.py from debian/changelog"
+)
+
+# Create a target that depends on version.py
+add_custom_target(generate_version DEPENDS ${PYTHON_DIR}/version.py)
+
 # --- 1️⃣ driver: build only the C++ backend
 add_custom_target(driver
     DEPENDS lcd_driver
@@ -113,16 +124,18 @@ add_custom_target(lcd_test
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/background_selector.py ${CMAKE_CURRENT_BINARY_DIR}/background_selector.py
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/themed_messagebox.py ${CMAKE_CURRENT_BINARY_DIR}/themed_messagebox.py
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/version.py ${CMAKE_CURRENT_BINARY_DIR}/version.py
 
     # Create symlink to USBLCD in build directory for development
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/USBLCD
-    
+
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/gui_controller.py
-    DEPENDS lcd_driver
+    DEPENDS lcd_driver generate_version
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Running LCD GUI with built backend..."
     EXCLUDE_FROM_ALL
 )
+
 
 # --- 3️⃣ appimage: build and package AppImage
 add_custom_target(appimage
@@ -143,6 +156,7 @@ add_custom_command(TARGET appimage POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/gui_controller.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/gui_controller.py
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/background_selector.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/background_selector.py
     COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/themed_messagebox.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/themed_messagebox.py
+    COMMAND ${CMAKE_COMMAND} -E copy ${PYTHON_DIR}/version.py ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/bin/version.py
 
     # Copy USBLCD data directory
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${DATA_DIR} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/tr-driver/USBLCD
@@ -150,11 +164,11 @@ add_custom_command(TARGET appimage POST_BUILD
     # Copy desktop file to BOTH locations (usr/share/applications AND AppDir root)
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tr-driver.desktop ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/applications/${APP_NAME}.desktop
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tr-driver.desktop ${CMAKE_CURRENT_BINARY_DIR}/AppDir/${APP_NAME}.desktop
-    
+
     # Copy icon to multiple locations
     COMMAND ${CMAKE_COMMAND} -E copy ${APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png
     COMMAND ${CMAKE_COMMAND} -E copy ${APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/${APP_NAME}.png
-    
+
     # Copy and make AppRun executable
     COMMAND ${CMAKE_COMMAND} -E copy ${APP_RUN} ${CMAKE_CURRENT_BINARY_DIR}/AppDir/AppRun
     COMMAND chmod +x ${CMAKE_CURRENT_BINARY_DIR}/AppDir/AppRun
@@ -163,6 +177,7 @@ add_custom_command(TARGET appimage POST_BUILD
     COMMAND ${Python3_EXECUTABLE} -m pip install pyinstaller --upgrade
     COMMAND ${Python3_EXECUTABLE} -m PyInstaller --onefile --name ${APP_NAME} --icon=${APP_ICON} 
             --add-data "${DATA_DIR}:USBLCD"
+            --add-data "${PYTHON_DIR}/version.py:."
             --hidden-import=PIL._tkinter_finder --hidden-import=PIL._imagingtk --hidden-import=PIL.ImageTk --hidden-import=tkinter --hidden-import=pystray
             ${CMAKE_SOURCE_DIR}/python/gui_controller.py
 
@@ -175,7 +190,7 @@ add_custom_command(TARGET appimage POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}-${APP_VERSION}-x86_64.AppImage
     EXCLUDE_FROM_ALL
 )
-add_dependencies(appimage lcd_driver)
+add_dependencies(appimage lcd_driver generate_version)
 
 # --- 4️⃣ deb: prepare staging area for Debian package
 add_custom_target(deb
