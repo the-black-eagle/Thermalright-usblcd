@@ -992,11 +992,17 @@ class LCDController:
         main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         # Left panel - Display
-        self.setup_display_panel(main_container)
+        left_container = tk.Frame(main_container, bg="#1e1e1e")
+        left_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.setup_display_panel(left_container)
 
-        # Right panel - Controls
+        # Middle panel - Controls
         self.setup_primary_control_panel(main_container)
-        self.setup_secondary_control_panel(main_container)
+
+        # Right panel - Media selector / secondary controls
+        right_container = tk.Frame(main_container, bg="#1e1e1e")
+        right_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        self.setup_secondary_control_panel(right_container)
 
 
     def setup_styles(self):
