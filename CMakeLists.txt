@@ -54,7 +54,7 @@ target_include_directories(lcd_driver PRIVATE
     ${SRC_DIR}
     ${LIBUSB_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
-    ${PYBIND11_JSON_INCLUDE_DIR}
+    /usr/local/include
 )
 
 target_link_libraries(lcd_driver PRIVATE
