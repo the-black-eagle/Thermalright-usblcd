@@ -1,8 +1,18 @@
+tr-driver (1.1.0-3) unstable; urgency=medium
+
+  * Add new 'about box' and button.  Add quit button
+  * Tidy GUI layout
+  * Rename 'restore' to 'open' in systray menu
+
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Tue, 21 Oct 2025 07:30:00 +0000
+
+
 tr-driver (1.1.0-2) unstable; urgency=medium
 
   * Add to github workflows to auto-generate AppImage
   
  -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sun, 19 Oct 2025 17:30:00 +0000
+
 
 tr-driver (1.1.0-1) unstable; urgency=medium
 
