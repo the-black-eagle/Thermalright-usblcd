@@ -96,7 +96,7 @@ class ThemedMessageBox(tk.Toplevel):
         
         # Button frame
         button_frame = tk.Frame(main_frame, bg="#2b2b2b")
-        button_frame.pack(fill=tk.X)
+        button_frame.pack(pady=(10, 0), anchor="center")
         
         # Create buttons
         self._buttons = []
@@ -126,7 +126,7 @@ class ThemedMessageBox(tk.Toplevel):
                 pady=8,
                 command=lambda val=return_value: self._on_button_click(val)
             )
-            btn.pack(side=tk.RIGHT, padx=(5, 0) if i > 0 else 0)
+            btn.pack(side=tk.RIGHT, padx=5)
             self._buttons.append(btn)
             
             # Hover effects
