@@ -1607,10 +1607,12 @@ class LCDController:
         selector = BackgroundSelector(
             parent,
             config_manager=self.config_manager,
+            config_wrapper=self.config_wrapper,
             apply_theme_callback=self.apply_theme_preview,
             apply_video_callback=self.apply_video_preview,
             browse_image_callback=self.browse_image_background,
-            browse_video_callback=self.browse_video_background  
+            browse_video_callback=self.browse_video_background,
+            reset_config_callback=self.reset_config
         )
         selector.pack(fill=tk.BOTH, expand=True, padx=5, pady=0)
 
