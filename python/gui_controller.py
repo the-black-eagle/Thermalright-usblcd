@@ -580,10 +580,6 @@ class DraggableTextPillow:
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "/System/Library/Fonts/Arial.ttf",  # macOS
-            "/System/Library/Fonts/Helvetica.ttc",  # macOS
-            "C:/Windows/Fonts/arial.ttf",  # Windows
-            "C:/Windows/Fonts/Arial.ttf",  # Windows
         ]
 
         # Return only fonts that actually exist
