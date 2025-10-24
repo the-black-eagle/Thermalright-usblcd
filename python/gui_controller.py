@@ -497,7 +497,6 @@ class DraggableTextPillow:
                         candidates.append((path, style_info))
 
             if not candidates:
-                print(f"No font found for family: {family}")
                 return None
 
             # Filter by style if specified
@@ -565,14 +564,11 @@ class DraggableTextPillow:
                 if os.path.exists(path):
                     return path
 
-            print(f"Font files not found on filesystem for: {family}")
             return None
 
         except subprocess.CalledProcessError as e:
-            print(f"fc-list command failed: {e}")
             return None
         except Exception as e:
-            print(f"Font lookup failed for {family}: {e}")
             return None
 
     def get_fallback_fonts(self):
