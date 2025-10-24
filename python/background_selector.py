@@ -5,15 +5,17 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 
 class BackgroundSelector(tk.Frame):
-    def __init__(self, parent, config_manager, apply_theme_callback, apply_video_callback, 
-                 browse_image_callback=None, browse_video_callback=None):
+    def __init__(self, parent, config_manager, config_wrapper, apply_theme_callback, apply_video_callback, 
+                 browse_image_callback=None, browse_video_callback=None, reset_config_callback=None):
         super().__init__(parent, bg="#2b2b2b", highlightbackground="#444444", 
                         highlightthickness=1, relief="solid")
         self.config_manager = config_manager
+        self.config_wrapper = config_wrapper
         self.apply_theme_callback = apply_theme_callback
         self.apply_video_callback = apply_video_callback
         self.browse_image_callback = browse_image_callback
         self.browse_video_callback = browse_video_callback
+        self.reset_config_callback = reset_config_callback
         data_dirs = self.get_data_directories()
         self.images_dir = data_dirs['images']
         self.videos_dir = data_dirs['videos']
@@ -340,8 +342,10 @@ class BackgroundSelector(tk.Frame):
                 break
 
     def save_config(self):
-        self.config_manager.save_config("lcd_config.json")
+        self.config = self.config_wrapper.get_config()
+        self.config_wrapper.save_config(self.config, "lcd_config.json")
 
     def reset_defaults(self):
-        self.config_manager.load_config_from_defaults()
-        print("Configuration reset to defaults.")
+        """Call the main GUI's reset function"""
+        if callable(self.reset_config_callback):
+            self.reset_config_callback()
