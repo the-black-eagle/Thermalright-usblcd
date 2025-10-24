@@ -32,6 +32,8 @@ import threading
 import lcd_driver
 from collections import deque
 from version import __version__
+from pathlib import Path
+
 READY_TIMEOUT = 30  # seconds
 
 
@@ -55,6 +57,148 @@ import os
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
+
+
+import sys
+import os
+from pathlib import Path
+
+def get_resource_base():
+    """Get the base directory where USBLCD is located"""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller bundle
+        return sys._MEIPASS
+    else:
+        # Running from source - check common locations
+        script_dir = Path(__file__).parent
+
+        # Check if USBLCD is in current directory (build/dev mode)
+        if (script_dir / "USBLCD").exists():
+            return str(script_dir)
+        # Check if installed via .deb
+        elif Path("/usr/share/tr-driver/USBLCD").exists():
+            return "/usr/share/tr-driver"
+        # Check one level up (if running from python/ directory)
+        elif (script_dir.parent / "USBLCD").exists():
+            return str(script_dir.parent)
+        else:
+            return str(script_dir)
+
+
+def make_relative_path(absolute_path):
+    """
+    Convert absolute path to relative path from USBLCD
+
+    Input: /media/sdg1/lcd-sysmon/USBLCD/images/013e/01.png
+    Output: USBLCD/images/013e/01.png
+    """
+    if not absolute_path:
+        return ""
+
+    path_obj = Path(absolute_path)
+    parts = path_obj.parts
+
+    try:
+        usblcd_index = parts.index("USBLCD")
+        relative_parts = parts[usblcd_index:]
+        return str(Path(*relative_parts))
+    except (ValueError, IndexError):
+        # USBLCD not in path - might already be relative
+        return absolute_path
+
+
+def make_absolute_path(relative_path):
+    """
+    Convert relative path to absolute path for current environment
+
+    Input: USBLCD/images/013e/01.png
+    Output: /tmp/_MEIxxxxxx/USBLCD/images/013e/01.png (or appropriate path)
+    """
+    if not relative_path:
+        return ""
+
+    # If already absolute and exists, return as-is
+    if os.path.isabs(relative_path) and os.path.exists(relative_path):
+        return relative_path
+
+    # Build absolute path
+    base = get_resource_base()
+    full_path = os.path.join(base, relative_path)
+
+    return full_path if os.path.exists(full_path) else ""
+
+class ConfigManagerWrapper:
+    def __init__(self, config_manager):
+        self.config_manager = config_manager
+        self.path_fields = [
+            "image_background_path",
+            "video_background_path"
+        ]
+
+
+    def save_config(self, config, path):
+        """Save config with relative paths"""
+        config_copy = config.copy()
+
+        # Convert absolute paths to relative
+        for field in self.path_fields:
+            if field in config_copy and config_copy[field]:
+                old_path = config_copy[field]
+                new_path = make_relative_path(config_copy[field])
+                config_copy[field] = new_path
+
+        # Update the internal config data first
+        for key, value in config_copy.items():
+            self.config_manager.update_config_value(key, value)
+
+        # Then save to file
+        return self.config_manager.save_config(path)
+
+
+    def load_config(self, path):
+        """Load config and convert relative paths to absolute"""
+        # Load from file
+        self.config_manager.load_config(path)
+
+        # Get the loaded config
+        config = self.config_manager.get_config()
+
+        # Convert relative paths to absolute
+        for field in self.path_fields:
+            if field in config and config[field]:
+                config[field] = make_absolute_path(config[field])
+
+        return config
+
+
+    def get_config(self):
+        """Get current config with absolute paths"""
+        config = self.config_manager.get_config()
+
+        # Convert relative paths to absolute
+        for field in self.path_fields:
+            if field in config and config[field]:
+                config[field] = make_absolute_path(config[field])
+
+        return config
+
+
+    def load_config_from_defaults(self):
+        """Load default config and convert relative paths to absolute"""
+        # Load defaults from C++
+        config = {}
+        self.config_manager.load_config_from_defaults()
+
+        # Get the loaded config
+        config = self.config_manager.get_config()
+
+        # Convert relative paths to absolute
+        for field in self.path_fields:
+            if field in config and config[field]:
+                config[field] = make_absolute_path(config[field])
+
+        return config
+
 
 class DarkFileBrowser(tk.Toplevel):
     def __init__(self, parent, title="Select File", filetypes=None, initialdir=None):
@@ -916,8 +1060,9 @@ class LCDController:
         self.info_poller = lcd_driver.CSystemInfoPoller()
         self.cached_metrics = {}
         self.config_manager = lcd_driver.ConfigManager(config_file)
-        self.config_manager.load_config(config_file)
-        self.cached_config = self.config_manager.get_config()
+        self.config_wrapper = ConfigManagerWrapper(self.config_manager)
+        self.config_wrapper.load_config(config_file)
+        self.cached_config = self.config_wrapper.get_config()
         self.last_metrics_update = datetime.now()
         self.metrics_update_interval = 1  # seconds (5 FPS)
         self.frame_times = deque(maxlen=60)
@@ -1048,7 +1193,7 @@ class LCDController:
         button_grid = tk.Frame(module_frame, bg="#2a2a2a")
         button_grid.pack(padx=15, pady=(0, 15))
         
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
         defaults = {
             "M1": "cpu_temp", "M2": "cpu_percent", "M3": "cpu_freq",
             "M4": "gpu_temp", "M5": "gpu_usage", "M6": "gpu_clock"
@@ -1074,7 +1219,7 @@ class LCDController:
 
     def refresh_module_buttons(self):
         """Update module button labels and states based on current config"""
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
 
         for name, btn in self.module_buttons.items():
             entry = config.get(name, {})
@@ -1087,7 +1232,7 @@ class LCDController:
 
     def refresh_system_toggles(self):
         """Update toggle states and module UI from current config without triggering traces."""
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
 
         # Ensure suppression flags exist
         self._suppress_child_callback = getattr(self, "_suppress_child_callback", False)
@@ -1150,7 +1295,7 @@ class LCDController:
         import tkinter.messagebox as msgbox
         if msgbox.askyesno("Reset Configuration", 
                           "Are you sure you want to reset all settings to defaults?"):
-            self.config_manager.load_config_from_defaults()
+            self.config_wrapper.load_config_from_defaults()
             self.refresh_module_buttons()
             self.refresh_system_toggles()
             self.setup_draggable_elements()  # Refresh display
@@ -1252,7 +1397,7 @@ class LCDController:
 
     def setup_custom_text_modern(self, parent):
         """Modern custom text section"""
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
         custom_config = config.get("custom", {})
 
         self.toggle_custom = tk.BooleanVar(value=custom_config.get("enabled", True))
@@ -1309,7 +1454,7 @@ class LCDController:
 
     def setup_datetime_modern(self, parent):
         """Modern date/time section with independent toggles for date and time"""
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
 
         # Outer section frame
         section = tk.Frame(parent, bg="#2a2a2a")
@@ -1382,7 +1527,7 @@ class LCDController:
 
     def setup_system_info_modern(self, parent):
         """Compact system info section with master toggle, CPU/GPU labels, and M1–M6 switches"""
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
 
         # Master toggle
         self.system_toggle = tk.BooleanVar(value=True)
@@ -1486,11 +1631,11 @@ class LCDController:
         self.refresh_system_toggles()
         self.setup_draggable_elements()  # Refresh display
         if hasattr(self, "custom_text_var"):
-            custom_conf = self.config_manager.get_config().get("custom", {})
+            custom_conf = self.config_wrapper.get_config().get("custom", {})
             self.custom_text_var.set(custom_conf.get("text", ""))
 
         if hasattr(self, "date_format_var"):
-            date_conf = self.config_manager.get_config().get("date", {})
+            date_conf = self.config_wrapper.get_config().get("date", {})
             self.date_format_var.set(date_conf.get("format", "%d-%m-%Y"))
             try:
                 self.update_date_preview()
@@ -1498,7 +1643,7 @@ class LCDController:
                 pass
 
         if hasattr(self, "time_format_var"):
-            time_conf = self.config_manager.get_config().get("time", {})
+            time_conf = self.config_wrapper.get_config().get("time", {})
             self.time_format_var.set(time_conf.get("format", "24h"))
 
         self.update_display_immediately()
@@ -1624,7 +1769,7 @@ class LCDController:
 
         def apply_selection():
             selection = listbox.get(tk.ACTIVE)
-            config = self.config_manager.get_config()
+            config = self.config_wrapper.get_config()
             self.config_manager.update_config_value(f"{module_name}.metric", selection)
             # Update button label
             self.module_buttons[module_name].label.config(text=f"{module_name}: {selection}")
@@ -1648,7 +1793,7 @@ class LCDController:
             pass
 
     def setup_draggable_elements(self):
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
 
         self.draggable_items.clear()
 
@@ -1691,7 +1836,7 @@ class LCDController:
 
     def get_display_text_for_metric(self, metric, info):
         # Check if we're using a vendor image that already includes labels/units
-        bg_path = self.config_manager.get_config().get("image_background_path") or ""
+        bg_path = self.config_wrapper.get_config().get("image_background_path") or ""
         skip_formatting = any(tag in bg_path for tag in ["/002", "/vendor/"]) if bg_path else False
 
         # Handle special cases first (non-numeric or special formatting)
@@ -1700,7 +1845,7 @@ class LCDController:
         elif metric == "date":
             return datetime.now().strftime("%d-%m-%Y")
         elif metric == "custom":
-            return self.config_manager.get_config().get("custom_text", "Hello")
+            return self.config_wrapper.get_config().get("custom_text", "Hello")
 
         # Handle all numeric metrics with appropriate units and formatting
         value = self.safe_number(info.get(metric, 0))
@@ -1743,7 +1888,7 @@ class LCDController:
         return metric_formats.get(metric, f"{metric.replace('_', ' ').title()}: {value:.1f}")
 
     def sync_items_to_config(self):
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
         for tag, item in self.draggable_items.items():
             current_enabled = config.get(tag, {}).get("enabled", True)
             self.config_manager.update_config_value(f"{tag}.x", item.x)
@@ -1768,7 +1913,7 @@ class LCDController:
 
     def on_canvas_press(self, event):
         self.dragging_item = None
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
 
         # Only check visible items
         for tag, item in reversed(list(self.draggable_items.items())):
@@ -1809,10 +1954,10 @@ class LCDController:
     def update_canvas_preview_only(self):
         """Update only the canvas preview during drag, without USB communication"""
         try:
-            config = self.config_manager.get_config()
+            config = self.config_wrapper.get_config()
 
-            bg_video_path = self.config_manager.get_config().get("video_background_path") or ""
-            bg_image_path = self.config_manager.get_config().get("image_background_path") or ""
+            bg_video_path = self.config_wrapper.get_config().get("video_background_path") or ""
+            bg_image_path = self.config_wrapper.get_config().get("image_background_path") or ""
 
             bg_img = self.bg_manager.get_background_bytes(bg_video_path, bg_image_path)
             if bg_img is not None:
@@ -1834,7 +1979,7 @@ class LCDController:
 
 
     def on_canvas_double_click(self, event):
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
         
         for tag, item in reversed(list(self.draggable_items.items())):
             if self.is_item_visible(tag, config) and item.contains(event.x, event.y):
@@ -1844,14 +1989,14 @@ class LCDController:
     def is_item_visible(self, tag, config=None):
         """Check if an item should be visible based on config"""
         if config is None:
-            config = self.config_manager.get_config()
+            config = self.config_wrapper.get_config()
 
         return config.get(tag, {}).get("enabled", True)
 
     def render_background(self):
         """Fetch and return just the background image (PIL.Image)."""
-        bg_video_path = self.config_manager.get_config().get("video_background_path") or ""
-        bg_image_path = self.config_manager.get_config().get("image_background_path") or ""
+        bg_video_path = self.config_wrapper.get_config().get("video_background_path") or ""
+        bg_image_path = self.config_wrapper.get_config().get("image_background_path") or ""
 
         bg_img = self.bg_manager.get_background_bytes(bg_video_path, bg_image_path)
     
@@ -1867,7 +2012,7 @@ class LCDController:
         """Draw metrics, text, and other overlays onto an existing image."""
         draw = ImageDraw.Draw(img)
 
-        config = self.config_manager.get_config()
+        config = self.config_wrapper.get_config()
         info = self.info_poller.get_info()
         now = datetime.now()
 
@@ -1933,7 +2078,7 @@ class LCDController:
         elapsed = (now - self.last_metrics_update).total_seconds()
         if elapsed >= self.metrics_update_interval:
             info = self.info_poller.get_info()
-            self.cached_config = self.config_manager.get_config()
+            self.cached_config = self.config_wrapper.get_config()
             config = self.cached_config
             text_updates = {}
 
@@ -2065,9 +2210,69 @@ class LCDController:
                 import traceback
                 traceback.print_exc()
 
-    def save_config(self):
-        self.sync_items_to_config()
-        self.config_manager.save_config(self.config_file)
+    def get_resource_base(self):
+        """Get the base directory where USBLCD is located"""
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # PyInstaller bundle
+            return sys._MEIPASS
+        else:
+            # Running from source - check common locations
+            script_dir = Path(__file__).parent
+
+            # Check if USBLCD is in current directory (build/dev mode)
+            if (script_dir / "USBLCD").exists():
+                return str(script_dir)
+            # Check if installed via .deb
+            elif Path("/usr/share/tr-driver/USBLCD").exists():
+                return "/usr/share/tr-driver"
+            # Check one level up (if running from python/ directory)
+            elif (script_dir.parent / "USBLCD").exists():
+                return str(script_dir.parent)
+            else:
+                return str(script_dir)
+
+
+    def make_relative_path(self,absolute_path):
+        """
+        Convert absolute path to relative path from USBLCD
+
+        Input: /media/sdg1/lcd-sysmon/USBLCD/images/013e/01.png
+        Output: USBLCD/images/013e/01.png
+        """
+        if not absolute_path:
+            return ""
+
+        path_obj = Path(absolute_path)
+        parts = path_obj.parts
+
+        try:
+            usblcd_index = parts.index("USBLCD")
+            relative_parts = parts[usblcd_index:]
+            return str(Path(*relative_parts))
+        except (ValueError, IndexError):
+            # USBLCD not in path - might already be relative
+            return absolute_path
+
+
+    def make_absolute_path(self,relative_path):
+        """
+        Convert relative path to absolute path for current environment
+
+        Input: USBLCD/images/013e/01.png
+        Output: /tmp/_MEIxxxxxx/USBLCD/images/013e/01.png (or appropriate path)
+        """
+        if not relative_path:
+            return ""
+
+        # If already absolute and exists, return as-is
+        if os.path.isabs(relative_path) and os.path.exists(relative_path):
+            return relative_path
+
+        # Build absolute path
+        base = get_resource_base()
+        full_path = os.path.join(base, relative_path)
+
+        return full_path if os.path.exists(full_path) else ""
 
 
     def start_data_updates(self):
