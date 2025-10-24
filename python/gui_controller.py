@@ -207,18 +207,18 @@ class DarkFileBrowser(tk.Toplevel):
         self.configure(bg="#2b2b2b")
         self.geometry("600x400")
         self.minsize(500, 350)  # Minimum size to show all elements
-        
+
         self.result = None
         self.filetypes = filetypes or [("All files", "*.*")]
         self.current_dir = initialdir or os.path.expanduser("~")
-        
+
         self.setup_ui()
         self.load_directory(self.current_dir)
-        
+
         # Make modal
         self.transient(parent)
         self.grab_set()
-        
+
         # Center on parent
         self.update_idletasks()
         x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
@@ -229,7 +229,7 @@ class DarkFileBrowser(tk.Toplevel):
         # Style configuration
         style = ttk.Style()
         style.theme_use('default')
-        
+
         # Treeview styling
         style.configure("Dark.Treeview",
                        background="#2b2b2b",
@@ -238,53 +238,53 @@ class DarkFileBrowser(tk.Toplevel):
                        borderwidth=0)
         style.map("Dark.Treeview",
                  background=[('selected', '#4CAF50')])
-        
+
         # Top frame - Directory navigation
         top_frame = tk.Frame(self, bg="#2b2b2b")
         top_frame.pack(fill=tk.X, padx=10, pady=10)
-        
+
         tk.Label(top_frame, text="Directory:", bg="#2b2b2b", fg="white",
                 font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
-        
+
         self.dir_entry = tk.Entry(top_frame, bg="#3c3c3c", fg="white",
                                  insertbackground="white", relief="flat")
         self.dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.dir_entry.bind('<Return>', lambda e: self.load_directory(self.dir_entry.get()))
-        
+
         # Up directory button
         up_btn = tk.Button(top_frame, text="↑", bg="#4CAF50", fg="white",
                           relief="flat", width=3, command=self.go_up)
         up_btn.pack(side=tk.LEFT, padx=2)
-        
+
         # Refresh button
         refresh_btn = tk.Button(top_frame, text="⟳", bg="#2196F3", fg="white",
                                relief="flat", width=3, command=self.refresh)
         refresh_btn.pack(side=tk.LEFT, padx=2)
-        
+
         # Middle frame - File/folder list
         middle_frame = tk.Frame(self, bg="#2b2b2b")
         middle_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
-        
+
         # Scrollbar
         scrollbar = ttk.Scrollbar(middle_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         # Treeview
         self.tree = ttk.Treeview(middle_frame, style="Dark.Treeview",
                                 yscrollcommand=scrollbar.set, selectmode='browse')
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.tree.yview)
-        
+
         # Columns
         self.tree['columns'] = ('size', 'modified')
         self.tree.column('#0', width=300, minwidth=200)
         self.tree.column('size', width=100, minwidth=50)
         self.tree.column('modified', width=150, minwidth=100)
-        
+
         self.tree.heading('#0', text='Name', anchor=tk.W)
         self.tree.heading('size', text='Size', anchor=tk.W)
         self.tree.heading('modified', text='Modified', anchor=tk.W)
-        
+
         # Bind events
         self.tree.bind('<Double-Button-1>', self.on_double_click)
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
@@ -292,59 +292,58 @@ class DarkFileBrowser(tk.Toplevel):
         # Bottom frame - File name and buttons
         bottom_frame = tk.Frame(self, bg="#2b2b2b")
         bottom_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
+
         tk.Label(bottom_frame, text="File name:", bg="#2b2b2b", fg="white",
                 font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
-        
+
         self.filename_entry = tk.Entry(bottom_frame, bg="#3c3c3c", fg="white",
                                       insertbackground="white", relief="flat")
         self.filename_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        
+
         # File type filter
         filter_frame = tk.Frame(self, bg="#2b2b2b")
         filter_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
+
         tk.Label(filter_frame, text="Files of type:", bg="#2b2b2b", fg="white",
                 font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
-        
+
         display_filetypes = [f"{desc} ({pattern})" for desc, pattern in self.filetypes]
         display_filetypes = [str(ft).strip("{}") for ft in display_filetypes]
         self.filetype_var = tk.StringVar(value=display_filetypes[0])
-        print(f"Display filetypes is '{display_filetypes}'")
         filetype_menu = ttk.Combobox(filter_frame, textvariable=self.filetype_var,
                                     values=display_filetypes,
                                     state='readonly', width = 150)
         filetype_menu.pack(side=tk.LEFT, padx=5)
         filetype_menu.bind('<<ComboboxSelected>>', lambda e: self.refresh())
-        
+
         # Buttons
         button_frame = tk.Frame(self, bg="#2b2b2b")
         button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
+
         open_btn = tk.Button(button_frame, text="Open", bg="#4CAF50", fg="white",
                             relief="flat", font=("Arial", 11, "bold"),
                             width=12, command=self.on_open)
         open_btn.pack(side=tk.RIGHT, padx=5)
-        
+
         cancel_btn = tk.Button(button_frame, text="Cancel", bg="#f44336", fg="white",
                               relief="flat", font=("Arial", 11, "bold"),
                               width=12, command=self.on_cancel)
         cancel_btn.pack(side=tk.RIGHT, padx=5)
-    
+
     def load_directory(self, path):
         try:
             path = os.path.abspath(path)
             if not os.path.isdir(path):
                 return
-            
+
             self.current_dir = path
             self.dir_entry.delete(0, tk.END)
             self.dir_entry.insert(0, path)
-            
+
             # Clear tree
             for item in self.tree.get_children():
                 self.tree.delete(item)
-            
+
             # Get file type filter
             selected_ft = self.filetype_var.get()
             extensions = []
@@ -352,7 +351,7 @@ class DarkFileBrowser(tk.Toplevel):
                 if ft_name in selected_ft:
                     extensions = ft_pattern.replace('*', '').split()
                     break
-            
+
             # List directories first, then files
             items = []
             try:
@@ -366,49 +365,49 @@ class DarkFileBrowser(tk.Toplevel):
                         if entry.is_file() and extensions:
                             if not any(entry.name.lower().endswith(ext.lower()) for ext in extensions):
                                 continue
-                        
+
                         items.append((entry.is_dir(), entry.name, size, modified))
                     except (PermissionError, OSError):
                         continue
             except PermissionError:
                 pass
-            
+
             # Sort: directories first, then by name
             items.sort(key=lambda x: (not x[0], x[1].lower()))
-            
+
             # Add to tree
             for is_dir, name, size, modified in items:
                 icon = "📁" if is_dir else "📄"
                 self.tree.insert('', 'end', text=f"{icon} {name}",
                                values=(size, modified))
-        
+
         except Exception as e:
-            print(f"Error loading directory: {e}")
-    
+            pass
+
     def format_size(self, size):
         for unit in ['B', 'KB', 'MB', 'GB']:
             if size < 1024.0:
                 return f"{size:.1f} {unit}"
             size /= 1024.0
         return f"{size:.1f} TB"
-    
+
     def format_time(self, timestamp):
         from datetime import datetime
         return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M')
-    
+
     def go_up(self):
         parent = os.path.dirname(self.current_dir)
         if parent != self.current_dir:
             self.load_directory(parent)
-    
+
     def refresh(self):
         self.load_directory(self.current_dir)
-    
+
     def on_double_click(self, event):
         selection = self.tree.selection()
         if not selection:
             return
-        
+
         item = self.tree.item(selection[0])
         name = item['text'].split(' ', 1)[1]  # Remove icon
         path = os.path.join(self.current_dir, name)
@@ -419,7 +418,7 @@ class DarkFileBrowser(tk.Toplevel):
             self.filename_entry.delete(0, tk.END)
             self.filename_entry.insert(0, name)
             self.on_open()
-    
+
     def on_select(self, event):
         selection = self.tree.selection()
         if selection:
@@ -430,13 +429,13 @@ class DarkFileBrowser(tk.Toplevel):
             if os.path.isfile(path):
                 self.filename_entry.delete(0, tk.END)
                 self.filename_entry.insert(0, name)
-    
+
     def on_open(self):
         filename = self.filename_entry.get()
         if filename:
             self.result = os.path.join(self.current_dir, filename)
             self.destroy()
-    
+
     def on_cancel(self):
         self.result = None
         self.destroy()
