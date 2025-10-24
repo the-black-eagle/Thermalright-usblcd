@@ -1333,7 +1333,7 @@ class LCDController:
         self.setup_system_info_modern(control_panel)
         # --- Centered About/Quit buttons ---
         button_row = tk.Frame(control_panel, bg="#1e1e1e")
-        button_row.pack(pady=(15, 0))  # adjust vertical spacing as needed
+        button_row.pack(pady=(10, 0))  # adjust vertical spacing as needed
 
         about_btn = tk.Button(
             button_row,
@@ -1346,7 +1346,7 @@ class LCDController:
             font=("Arial", 10, "bold"),
             cursor="hand2",
             padx=20,
-            pady=6,
+            pady=4,
             command=self.show_about  # you'll define this
         )
         about_btn.pack(side=tk.LEFT, padx=10)
@@ -1362,7 +1362,7 @@ class LCDController:
             font=("Arial", 10, "bold"),
             cursor="hand2",
             padx=20,
-            pady=6,
+            pady=4,
             command=self.root.destroy
         )
         quit_btn.pack(side=tk.LEFT, padx=10)
