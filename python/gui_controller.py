@@ -1701,7 +1701,8 @@ class LCDController:
 
     def clear_video_background(self):
         """Clear video background"""
-        self.video_bg_path_var.set("None")
+        if hasattr(self.image_bg_path_var, "set"):
+            self.image_bg_path_var.set("None")
         self.config_manager.update_config_value("video_background_path", None)
         self.update_display_immediately()
 
@@ -1722,7 +1723,7 @@ class LCDController:
                 self.refresh_module_buttons()
                 self.refresh_system_toggles()
                 self.setup_draggable_elements()  # Refresh display
-            if self.video_bg_path_var:
+            if self.video_bg_path_var and  hasattr(self.video_bg_path_var, "set"):
                 self.video_bg_path_var.set("None")
                 self.config_manager.update_config_value("video_background_path", None)
             self.config_manager.update_config_value("image_background_path", filename)
@@ -1730,7 +1731,8 @@ class LCDController:
 
     def clear_image_background(self):
         """Clear image background"""
-        self.image_bg_path_var.set("None")
+        if hasattr(self.image_bg_path_var, "set"):
+            self.image_bg_path_var.set("None")
         self.config_manager.update_config_value("image_background_path", None)
         self.update_display_immediately()
 
