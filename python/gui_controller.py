@@ -1283,8 +1283,8 @@ class LCDController:
 
     def reset_config(self):
         """Reset configuration to defaults"""
-        import tkinter.messagebox as msgbox
-        if msgbox.askyesno("Reset Configuration", 
+
+        if messagebox.askyesno("Reset Configuration",
                           "Are you sure you want to reset all settings to defaults?"):
             self.config_wrapper.load_config_from_defaults()
             self.refresh_module_buttons()
