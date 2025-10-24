@@ -119,7 +119,7 @@
         "x": 223,
         "y": 119
     },
-    "image_background_path": "/media/sdg1/lcd-sysmon/USBLCD/images/019e/01.png",
+    "image_background_path": "USBLCD/images/019e/01.png",
     "time": {
         "color": "#000000",
         "enabled": true,
