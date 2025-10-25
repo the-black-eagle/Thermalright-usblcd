@@ -1,3 +1,21 @@
+tr-driver (1.1.1) unstable; urgency=medium
+
+  * Remove debug prints to console
+  * Add wrapper to detect run from location (appImage, local build, system install)
+    and calculate relative paths to the data directory
+  * Cosmetic changes (align buttons, theme message box)
+  * Remove redundant non-linux font paths
+  * Internal code tidy (whitespace etc)
+
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sat, 22 Oct 2025 10:38:00 +0000
+
+
+tr-driver (1.1.0-4) unstable; urgency=medium
+
+  * Add auto versioning from debian/changelog when building appImage or in build directory
+
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Tue, 21 Oct 2025 15:40:00 +0000
+
 tr-driver (1.1.0-3) unstable; urgency=medium
 
   * Add new 'about box' and button.  Add quit button
