@@ -199,6 +199,34 @@ class ConfigManagerWrapper:
 
         return config
 
+    def get_config_dir(self):
+        """
+        Get the directory where user config should be saved
+
+        Returns:
+        - ~/.config/tr-driver/ for normal usage
+        - Current directory for dev/testing
+        """
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # AppImage - use user config directory
+            config_dir = Path.home() / ".config" / "tr-driver"
+        elif Path("/usr/share/tr-driver/USBLCD").exists():
+            # Installed via .deb - use user config directory
+            config_dir = Path.home() / ".config" / "tr-driver"
+        else:
+            # Development mode - use current directory
+            config_dir = Path.cwd()
+
+        # Create directory if it doesn't exist
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        return str(config_dir)
+
+
+    def get_config_file(self, config_file):
+        """Get the full path to the config file"""
+        return os.path.join(self.get_config_dir(), config_file)
+
 
 class DarkFileBrowser(tk.Toplevel):
     def __init__(self, parent, title="Select File", filetypes=None, initialdir=None):
@@ -1033,7 +1061,7 @@ class ModernModuleButton(tk.Frame):
 
 
 class LCDController:
-    def __init__(self, root, config_file="lcd_config.json"):
+    def __init__(self, root, configfile):
         self.root = root
         self._update_queue = queue.Queue(maxsize=1)  # only keep latest request
         self._stop_threads = threading.Event()  # Flag to stop threads
@@ -1041,7 +1069,6 @@ class LCDController:
         self._paused.set()  # Start unpaused
         self._update_thread = threading.Thread(target=self._update_worker, daemon=True)
         self._update_thread.start()
-        self.config_file = config_file
         self.draggable_items = {}
         self.background_image_id = None
         self.updating_gui = False
@@ -1050,9 +1077,11 @@ class LCDController:
         self.module_toggle_vars = {}
         self.info_poller = lcd_driver.CSystemInfoPoller()
         self.cached_metrics = {}
-        self.config_manager = lcd_driver.ConfigManager(config_file)
+        self.configfile = configfile
+        self.config_manager = lcd_driver.ConfigManager(self.configfile)
         self.config_wrapper = ConfigManagerWrapper(self.config_manager)
-        self.config_wrapper.load_config(config_file)
+        self.config_file = self.config_wrapper.get_config_file(self.configfile)
+        self.config_wrapper.load_config(self.config_file)
         self.cached_config = self.config_wrapper.get_config()
         self.last_metrics_update = datetime.now()
         self.metrics_update_interval = 1  # seconds (5 FPS)
@@ -1610,9 +1639,11 @@ class LCDController:
             config_wrapper=self.config_wrapper,
             apply_theme_callback=self.apply_theme_preview,
             apply_video_callback=self.apply_video_preview,
+            configfile=self.configfile,
             browse_image_callback=self.browse_image_background,
             browse_video_callback=self.browse_video_background,
             reset_config_callback=self.reset_config
+
         )
         selector.pack(fill=tk.BOTH, expand=True, padx=5, pady=0)
 
@@ -2415,6 +2446,16 @@ if __name__ == "__main__":
     import threading
     from PIL import Image
     import pystray
+    import argparse
+
+
+    parser = argparse.ArgumentParser(
+        prog='tr-driver',
+        description='LCD driver for AliCorp LCD')
+
+    parser.add_argument('-f', '--configfile', default="lcd_config.json", help="Name of config file to use")
+    args = parser.parse_args()
+    configfile = args.configfile
 
     if not lcd_driver.init_dev():
         messagebox.showerror("TR Driver", "Failed to initialize USB device")
@@ -2444,7 +2485,7 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"Warning: could not set iconphoto: {e}", file=sys.stderr)
 
-    app = LCDController(root)
+    app = LCDController(root, configfile)
 
     # --- System tray support ---
     tray_icon = None

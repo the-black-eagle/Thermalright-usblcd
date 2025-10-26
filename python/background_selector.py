@@ -5,12 +5,13 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 
 class BackgroundSelector(tk.Frame):
-    def __init__(self, parent, config_manager, config_wrapper, apply_theme_callback, apply_video_callback, 
+    def __init__(self, parent, config_manager, config_wrapper, apply_theme_callback, apply_video_callback, configfile,
                  browse_image_callback=None, browse_video_callback=None, reset_config_callback=None):
         super().__init__(parent, bg="#2b2b2b", highlightbackground="#444444", 
                         highlightthickness=1, relief="solid")
         self.config_manager = config_manager
         self.config_wrapper = config_wrapper
+        self.configfile = configfile
         self.apply_theme_callback = apply_theme_callback
         self.apply_video_callback = apply_video_callback
         self.browse_image_callback = browse_image_callback
@@ -341,9 +342,12 @@ class BackgroundSelector(tk.Frame):
                     self.apply_video_callback(video_path)
                 break
 
+
     def save_config(self):
+        config_file = self.config_wrapper.get_config_file(self.configfile)
         self.config = self.config_wrapper.get_config()
-        self.config_wrapper.save_config(self.config, "lcd_config.json")
+        self.config_wrapper.save_config(self.config, config_file)
+
 
     def reset_defaults(self):
         """Call the main GUI's reset function"""
