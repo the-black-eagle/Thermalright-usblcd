@@ -17,9 +17,17 @@ echo "Detected OBJDIR=$OBJDIR"
 install -D -m 0755 "$CURDIR/python/gui_controller.py" \
     "$CURDIR/debian/tr-driver/usr/lib/tr-driver/tr-driver"
 
-# 1a. Also install background_selector.py (new dependency)
+# 1a. Also install background_selector.py
 install -D -m 0644 "$CURDIR/python/background_selector.py" \
     "$CURDIR/debian/tr-driver/usr/lib/tr-driver/background_selector.py"
+
+# 1b. Also need to install themed_messagebox.py
+install -D -m 0644 "$CURDIR/python/themed_messagebox.py" \
+    "$CURDIR/debian/tr-driver/usr/lib/tr-driver/themed_messagebox.py"
+
+# 1c. Install data directory
+mkdir -p "$CURDIR/debian/tr-driver/usr/share/tr-driver/"
+cp -r "$CURDIR/USBLCD" "$CURDIR/debian/tr-driver/usr/share/tr-driver/"
 
 # 2. Install compiled .so to Python dist-packages
 SOFILE=$(ls "$OBJDIR"/lcd_driver*.so 2>/dev/null | head -n1)
