@@ -70,7 +70,7 @@ jobs:
         cd ..
         debuild -us -uc -b
         VERSION=$(head -n1 debian/changelog | awk '{print $2}' | tr -d '()')
-        mv tr-driver_${VERSION}_amd64.deb build/ || true
+        mv ../tr-driver_${VERSION}_amd64.deb build/ || true
         echo "Built: tr-driver_${VERSION}_amd64.deb"
 
     - name: Extract version from changelog
@@ -83,7 +83,7 @@ jobs:
     - name: List generated files
       run: |
         ls -lh build/*.AppImage || true
-        ls -lh ../*.deb || true
+        ls -lh build/*.deb || true
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
