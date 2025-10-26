@@ -280,12 +280,12 @@ class DarkFileBrowser(tk.Toplevel):
         self.dir_entry.bind('<Return>', lambda e: self.load_directory(self.dir_entry.get()))
 
         # Up directory button
-        up_btn = tk.Button(top_frame, text="↑", bg="#4CAF50", fg="white",
+        up_btn = tk.Button(top_frame, text="↑", bg="#4CAF50", fg="white", activebackground="#45A049",activeforeground="black",
                           relief="flat", width=3, command=self.go_up)
         up_btn.pack(side=tk.LEFT, padx=2)
 
         # Refresh button
-        refresh_btn = tk.Button(top_frame, text="⟳", bg="#2196F3", fg="white",
+        refresh_btn = tk.Button(top_frame, text="⟳", bg="#2196F3", fg="white", activebackground="#0b7dda", activeforeground="black",
                                relief="flat", width=3, command=self.refresh)
         refresh_btn.pack(side=tk.LEFT, padx=2)
 
@@ -348,12 +348,12 @@ class DarkFileBrowser(tk.Toplevel):
         button_frame = tk.Frame(self, bg="#2b2b2b")
         button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
 
-        open_btn = tk.Button(button_frame, text="Open", bg="#4CAF50", fg="white",
+        open_btn = tk.Button(button_frame, text="Open", bg="#4CAF50", fg="white",activebackground="#45A049",activeforeground="black",
                             relief="flat", font=("Arial", 11, "bold"),
                             width=12, command=self.on_open)
         open_btn.pack(side=tk.RIGHT, padx=5)
 
-        cancel_btn = tk.Button(button_frame, text="Cancel", bg="#f44336", fg="white",
+        cancel_btn = tk.Button(button_frame, text="Cancel", bg="#f44336", fg="white",activebackground="#da190b",activeforeground="black",
                               relief="flat", font=("Arial", 11, "bold"),
                               width=12, command=self.on_cancel)
         cancel_btn.pack(side=tk.RIGHT, padx=5)
@@ -1370,7 +1370,7 @@ class LCDController:
             bg="#2196F3",
             fg="white",
             activebackground="#0b7dda",
-            activeforeground="white",
+            activeforeground="black",
             relief="flat",
             font=("Arial", 10, "bold"),
             cursor="hand2",
@@ -1386,7 +1386,7 @@ class LCDController:
             bg="#f44336",
             fg="white",
             activebackground="#da190b",
-            activeforeground="white",
+            activeforeground="black",
             relief="flat",
             font=("Arial", 10, "bold"),
             cursor="hand2",

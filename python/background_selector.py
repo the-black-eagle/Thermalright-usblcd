@@ -80,21 +80,28 @@ class BackgroundSelector(tk.Frame):
         browse_frame = tk.Frame(bottom_frame, bg="#2b2b2b")
         browse_frame.pack(fill=tk.X, pady=(0, 5))
 
-        browse_image_btn = tk.Button(browse_frame, text="Browse Image", 
-                                     width=button_width,
-                                     bg="#2196F3", fg="white", relief="flat",
-                                     font=("Arial", 10, "bold"),
-                                     activebackground="#1976D2",
-                                     command=self.browse_image_callback if self.browse_image_callback else None)
-        browse_image_btn.pack(side="left", expand=True, padx=5, pady=5)
+        # Store button references
+        self.browse_image_btn = tk.Button(browse_frame, text="Browse Image",
+                                         width=button_width,
+                                         bg="#2196F3", fg="white", relief="flat",
+                                         font=("Arial", 10, "bold"),
+                                         activebackground="#1976D2",
+                                         command=lambda: self._browse_with_reset(
+                                             self.browse_image_btn, 
+                                             self.browse_image_callback
+                                         ) if self.browse_image_callback else None)
+        self.browse_image_btn.pack(side="left", expand=True, padx=5, pady=5)
 
-        browse_video_btn = tk.Button(browse_frame, text="Browse Video", 
-                                     width=button_width,
-                                     bg="#9C27B0", fg="white", relief="flat",
-                                     font=("Arial", 10, "bold"),
-                                     activebackground="#7B1FA2",
-                                     command=self.browse_video_callback if self.browse_video_callback else None)
-        browse_video_btn.pack(side="left", expand=True, padx=5, pady=5)
+        self.browse_video_btn = tk.Button(browse_frame, text="Browse Video",
+                                         width=button_width,
+                                         bg="#9C27B0", fg="white", relief="flat",
+                                         font=("Arial", 10, "bold"),
+                                         activebackground="#7B1FA2",
+                                         command=lambda: self._browse_with_reset(
+                                             self.browse_video_btn,
+                                             self.browse_video_callback
+                                         ) if self.browse_video_callback else None)
+        self.browse_video_btn.pack(side="left", expand=True, padx=5, pady=5)
 
         # Second row - Save and Reset buttons
         action_frame = tk.Frame(bottom_frame, bg="#2b2b2b")
@@ -117,6 +124,15 @@ class BackgroundSelector(tk.Frame):
         default_btn.pack(side="left", expand=True, padx=5, pady=5)
 
 
+    def _browse_with_reset(self, button, callback):
+        """Reset button state after closing file dialog"""
+        # Call the callback
+        if callable(callback):
+            callback()
+
+        # Ensure button is back to normal after dialog closes
+        if button['state'] == "active":
+            button['state'] = "normal"
 
 
     def get_data_directories(self):
