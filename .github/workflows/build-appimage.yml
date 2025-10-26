@@ -69,25 +69,9 @@ jobs:
         make -j"$(nproc)" lcd_driver
         cd ..
         debuild -us -uc -b
-        VERSION=$(head -n1 ../debian/changelog | awk '{print $2}' | tr -d '()')
-        mv ../tr-driver_${VERSION}_amd64.deb ./ || true
+        VERSION=$(head -n1 /debian/changelog | awk '{print $2}' | tr -d '()')
+        mv tr-driver_${VERSION}_amd64.deb ./ || true
         echo "Built: tr-driver_${VERSION}_amd64.deb"
-      env:
-        DEB_BUILD_OPTIONS: "parallel=4"
-
-    - name: List generated files
-      run: |
-        ls -lh build/*.AppImage || true
-        ls -lh build/*.deb || true
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: |
-          build/tr-driver-*.AppImage
-          build/tr-driver_*_amd64.deb
-
 
     - name: Extract version from changelog
       id: version
