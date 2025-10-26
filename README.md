@@ -1,8 +1,10 @@
 # LCD System Monitor (Linux Driver + GUI)
 
 [![Build AppImage](https://github.com/the-black-eagle/Thermalright-usblcd/actions/workflows/build-appimage.yml/badge.svg)](https://github.com/the-black-eagle/Thermalright-usblcd/actions/workflows/build-appimage.yml)
-[![Latest Release](https://img.shields.io/github/v/release/the-black-eagle/Thermalright-usblcd?label=Latest%20AppImage&logo=github)](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest)
+[![Latest AppImage](https://img.shields.io/github/v/release/the-black-eagle/Thermalright-usblcd?label=Latest%20AppImage&logo=github)](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest)
+[![Latest .deb](https://img.shields.io/github/v/release/the-black-eagle/Thermalright-usblcd?label=Latest%20DEB&logo=debian)](https://github.com/the-black-eagle/Thermalright-usblcd/releases/latest)
 [![License](https://img.shields.io/github/license/the-black-eagle/Thermalright-usblcd)](LICENSE)
+
 
 Native Linux driver and GUI for the Thermalright USB LCD system monitor. Display real-time system stats, custom images, and videos on your Thermalright LCD panel.
 
