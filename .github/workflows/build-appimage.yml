@@ -69,8 +69,8 @@ jobs:
         make -j"$(nproc)" lcd_driver
         cd ..
         debuild -us -uc -b
-        VERSION=$(head -n1 /debian/changelog | awk '{print $2}' | tr -d '()')
-        mv tr-driver_${VERSION}_amd64.deb ./ || true
+        VERSION=$(head -n1 debian/changelog | awk '{print $2}' | tr -d '()')
+        mv tr-driver_${VERSION}_amd64.deb build/ || true
         echo "Built: tr-driver_${VERSION}_amd64.deb"
 
     - name: Extract version from changelog
@@ -91,7 +91,7 @@ jobs:
       with:
         files: |
           build/tr-driver-*.AppImage
-          ../tr-driver_*_amd64.deb
+          build/tr-driver_*_amd64.deb
         body: |
           ## LCD System Monitor Release ${{ steps.version.outputs.version }}
           
@@ -118,5 +118,5 @@ jobs:
         name: build-artifacts
         path: |
           build/tr-driver-*.AppImage
-          ../tr-driver_*_amd64.deb
+          build/tr-driver_*_amd64.deb
         retention-days: 30
