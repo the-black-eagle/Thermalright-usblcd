@@ -127,6 +127,7 @@ def make_absolute_path(relative_path):
 
     return full_path if os.path.exists(full_path) else ""
 
+
 class ConfigManagerWrapper:
     def __init__(self, config_manager):
         self.config_manager = config_manager

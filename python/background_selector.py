@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 
+
 class BackgroundSelector(tk.Frame):
     def __init__(self, parent, config_manager, config_wrapper, apply_theme_callback, apply_video_callback, configfile,
                  browse_image_callback=None, browse_video_callback=None, reset_config_callback=None):
@@ -20,7 +21,7 @@ class BackgroundSelector(tk.Frame):
         data_dirs = self.get_data_directories()
         self.images_dir = data_dirs['images']
         self.videos_dir = data_dirs['videos']
-        
+
         # Track selected items
         self.selected_theme_frame = None
         self.selected_video_frame = None
@@ -140,7 +141,7 @@ class BackgroundSelector(tk.Frame):
         Get the correct paths for images and videos based on install location
         """
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        
+
         # Possible locations for data
         locations = [
             # 1. Development: build directory with symlink
@@ -152,7 +153,7 @@ class BackgroundSelector(tk.Frame):
             # 4. Relative to script in lib/tr-driver
             os.path.join(script_dir, '..', '..', 'share', 'tr-driver', 'USBLCD'),
         ]
-        
+
         # Find first location that exists
         for location in locations:
             images_dir = os.path.join(location, 'images')
@@ -163,28 +164,29 @@ class BackgroundSelector(tk.Frame):
                     'images': os.path.abspath(images_dir) if os.path.exists(images_dir) else None,
                     'videos': os.path.abspath(videos_dir) if os.path.exists(videos_dir) else None
                 }
-        
+
         # Fallback
         print(f"WARNING: Could not find USBLCD data directory, checked: {locations}")
         return {'images': None, 'videos': None}
+
 
     def create_preview_grid(self, parent, base_dir, img_size, on_click, is_video=False):
         # Container frame
         container = tk.Frame(parent, bg="#2b2b2b")
         container.pack(fill=tk.BOTH, expand=True)
-        
+
         # Calculate required width for 5 columns
         max_cols = 5
         canvas_width = max_cols * (img_size[0] + 10) + 30
-        
+
         loading_label = tk.Label(container, text="Loading thumbnails...", 
                                 bg="#2b2b2b", fg="white", font=("Arial", 12))
         loading_label.pack(expand=True)
         container.update()
-        
+
         # Canvas with scrollbar - set minimum width
         canvas = tk.Canvas(container, bg="#2b2b2b", highlightthickness=0, width=canvas_width)
-        
+
         # Style the scrollbar
         style = ttk.Style()
         style.configure("Dark.Vertical.TScrollbar",
@@ -192,37 +194,41 @@ class BackgroundSelector(tk.Frame):
                        troughcolor="#2b2b2b",
                        borderwidth=0,
                        arrowcolor="white")
-        
+
         scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview,
                                  style="Dark.Vertical.TScrollbar")
-        
+
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill=tk.BOTH, expand=True)
-        
+
         canvas.configure(yscrollcommand=scrollbar.set)
-        
+
         # Frame inside canvas
         frame = tk.Frame(canvas, bg="#2b2b2b")
         canvas_window = canvas.create_window((0, 0), window=frame, anchor="nw")
 
         row, col = 0, 0
         loading_label.destroy()
+
+
         # Mouse wheel scroll function
         def on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        
+
+
         def on_mouse_enter(event):
             # Bind mouse wheel when mouse enters
             canvas.bind_all("<MouseWheel>", on_mousewheel)
             canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
             canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
-        
+
+
         def on_mouse_leave(event):
             # Unbind when mouse leaves
             canvas.unbind_all("<MouseWheel>")
             canvas.unbind_all("<Button-4>")
             canvas.unbind_all("<Button-5>")
-        
+
         # Bind enter/leave events to canvas and frame
         canvas.bind("<Enter>", on_mouse_enter)
         canvas.bind("<Leave>", on_mouse_leave)
@@ -239,23 +245,23 @@ class BackgroundSelector(tk.Frame):
                     img = Image.open(path)
                     img = img.resize(img_size, Image.Resampling.BILINEAR)
                     photo = ImageTk.PhotoImage(img)
-                    
+
                     # Frame around image for border effect
                     img_frame = tk.Frame(frame, bg="#444444", padx=2, pady=2)
                     img_frame.grid(row=row, column=col, padx=5, pady=5)
-                    
+
                     label = tk.Label(img_frame, image=photo, bg="#2b2b2b", cursor="hand2")
                     label.image = photo  # prevent GC
                     label.pack()
-                    
+
                     # Store frame reference and bind click with highlight
                     self.video_frames[path] = img_frame
                     label.bind("<Button-1>", lambda e, p=path, f=img_frame: self.on_video_click_with_highlight(p, f))
-                    
+
                     # Bind mouse enter to labels too
                     label.bind("<Enter>", on_mouse_enter)
                     img_frame.bind("<Enter>", on_mouse_enter)
-                    
+
                     col += 1
                     if col >= max_cols:
                         col = 0
@@ -272,23 +278,23 @@ class BackgroundSelector(tk.Frame):
                     img = Image.open(path)
                     #img = img.thumbnail(img_size, Image.Resampling.BILINEAR)
                     photo = ImageTk.PhotoImage(img)
-                    
+
                     # Frame around image for border effect
                     img_frame = tk.Frame(frame, bg="#444444", padx=2, pady=2)
                     img_frame.grid(row=row, column=col, padx=5, pady=5)
-                    
+
                     label = tk.Label(img_frame, image=photo, bg="#2b2b2b", cursor="hand2")
                     label.image = photo  # prevent GC
                     label.pack()
-                    
+
                     # Store frame reference and bind click with highlight
                     self.theme_frames[path] = img_frame
                     label.bind("<Button-1>", lambda e, p=path, f=img_frame: self.on_theme_click_with_highlight(p, f))
-                    
+
                     # Bind mouse enter to labels too
                     label.bind("<Enter>", on_mouse_enter)
                     img_frame.bind("<Enter>", on_mouse_enter)
-                    
+
                     col += 1
                     if col >= max_cols:
                         col = 0
@@ -299,15 +305,16 @@ class BackgroundSelector(tk.Frame):
         # Update scroll region and canvas window width after all items are added
         frame.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
-        
+
         # Make the frame width match required width for 5 columns
         frame_width = max_cols * (img_size[0] + 20)
         
         # Bind to configure event to keep frame width fixed
         def on_canvas_configure(event):
             canvas.itemconfig(canvas_window, width=frame_width)
-        
+
         canvas.bind("<Configure>", on_canvas_configure)
+
 
     def on_theme_click_with_highlight(self, theme_path, frame):
         """Handle theme click with visual highlighting"""
@@ -325,6 +332,7 @@ class BackgroundSelector(tk.Frame):
         # Call original handler
         self.on_theme_click(theme_path)
 
+
     def on_video_click_with_highlight(self, video_preview_path, frame):
         """Handle video click with visual highlighting"""
         # Unhighlight previous selection
@@ -338,6 +346,7 @@ class BackgroundSelector(tk.Frame):
         # Call original handler
         self.on_video_click(video_preview_path)
 
+
     def on_theme_click(self, theme_path):
         theme_dir = os.path.dirname(theme_path)
         config_path = os.path.join(theme_dir, "lcd_config.json")
@@ -347,6 +356,7 @@ class BackgroundSelector(tk.Frame):
         self.config_manager.update_config_value("image_background_path", image_path)
         if callable(self.apply_theme_callback):
             self.apply_theme_callback(image_path)
+
 
     def on_video_click(self, video_preview_path):
         video_name = os.path.splitext(os.path.basename(video_preview_path))[0]
