@@ -1,3 +1,14 @@
+tr-driver (1.1.2) unstable; urgency=medium
+
+  * Internal code tidy (whitespace etc)
+  * Cosmetic - Make sure all buttons match in colour and behaviour
+  * Add commandline argument for config filename - This allows multiple
+    configs to be used independently
+  * Ensure when running as appImage or system installed that config(s)
+    are saved to `~/.config/tr-driver/configfilename
+
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sun, 26 Oct 2025 12:00:00 +0000
+
 tr-driver (1.1.1) unstable; urgency=medium
 
   * Remove debug prints to console
@@ -7,7 +18,7 @@ tr-driver (1.1.1) unstable; urgency=medium
   * Remove redundant non-linux font paths
   * Internal code tidy (whitespace etc)
 
- -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sat, 22 Oct 2025 10:38:00 +0000
+ -- the-black-eagle <18698554+the-black-eagle@users.noreply.github.com>  Sat, 25 Oct 2025 10:38:00 +0000
 
 
 tr-driver (1.1.0-4) unstable; urgency=medium
