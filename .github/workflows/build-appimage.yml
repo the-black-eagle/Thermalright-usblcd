@@ -1,4 +1,4 @@
-name: Build AppImage
+name: Build AppImage and .deb
 
 on:
   push:
@@ -12,11 +12,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -30,86 +30,106 @@ jobs:
           pybind11-dev \
           nlohmann-json3-dev \
           pkg-config \
-          wget
-        
-        # Install pybind11_json header (single file, not directory)
+          wget \
+          devscripts \
+          debhelper
+
+        # Install pybind11_json header
         echo "Downloading pybind11_json.hpp..."
         sudo wget -O /usr/local/include/pybind11_json.hpp \
           https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp
-        
-        # Verify it was downloaded
-        echo "Verifying pybind11_json.hpp installation:"
-        ls -la /usr/local/include/pybind11_json.hpp
-        
-        # Install Python dependencies
+
         pip3 install pyinstaller pillow pystray
-    
+
     - name: Download appimagetool
       run: |
         wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
         chmod +x appimagetool-x86_64.AppImage
         sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
-        
-        # Install FUSE for appimagetool
         sudo apt-get install -y libfuse2
-    
-    - name: Build project
+
+    - name: Build project and AppImage
       run: |
-        echo "::group::CMake Configuration"
         mkdir build
         cd build
         cmake ..
-        echo "::endgroup::"
-        
-        echo "::group::Verify include paths"
-        echo "Checking for pybind11_json.hpp:"
-        ls -la /usr/local/include/pybind11_json.hpp || echo "NOT FOUND!"
-        echo "::endgroup::"
-        
-        echo "::group::Build C++ module"
         make lcd_driver
-        echo "::endgroup::"
-        
-        echo "::group::Build AppImage (this takes 5-10 minutes)"
         export ARCH=x86_64
         make appimage
-        echo "::endgroup::"
       env:
         ARCH: x86_64
-    
+
+    - name: Build .deb package
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+        make -j"$(nproc)" lcd_driver
+        debuild -us -uc -b
+        VERSION=$(head -n1 ../debian/changelog | awk '{print $2}' | tr -d '()')
+        mv ../tr-driver_${VERSION}_amd64.deb ./ || true
+        echo "Built: tr-driver_${VERSION}_amd64.deb"
+      env:
+        DEB_BUILD_OPTIONS: "parallel=4"
+
+    - name: List generated files
+      run: |
+        ls -lh build/*.AppImage || true
+        ls -lh build/*.deb || true
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          build/tr-driver-*.AppImage
+          build/tr-driver_*_amd64.deb
+
+
     - name: Extract version from changelog
       id: version
       run: |
         VERSION=$(head -n1 debian/changelog | awk '{print $2}' | tr -d '()')
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "Detected version: ${VERSION}"
-    
+
     - name: List generated files
       run: |
-        ls -lh build/*.AppImage
-    
+        ls -lh build/*.AppImage || true
+        ls -lh ../*.deb || true
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: build/tr-driver-*.AppImage
+        files: |
+          build/tr-driver-*.AppImage
+          ../tr-driver_*_amd64.deb
         body: |
           ## LCD System Monitor Release ${{ steps.version.outputs.version }}
           
           ### Installation
-          1. Download the AppImage file below
-          2. Make it executable: `chmod +x tr-driver-*.AppImage`
-          3. Run it: `./tr-driver-*.AppImage`
+          #### 🖥️ AppImage
+          1. Download: `tr-driver-*.AppImage`
+          2. Make executable: `chmod +x tr-driver-*.AppImage`
+          3. Run: `./tr-driver-*.AppImage`
+          
+          #### 📦 Debian package
+          1. Download: `tr-driver_${{ steps.version.outputs.version }}_amd64.deb`
+          2. Install: `sudo dpkg -i tr-driver_${{ steps.version.outputs.version }}_amd64.deb`
+          3. Run: `tr-driver`
           
           ### Changes
           See [CHANGELOG.md](CHANGELOG.md) for details.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Upload artifact (for non-tag pushes)
+
+    - name: Upload artifacts (for non-tag builds)
       if: "!startsWith(github.ref, 'refs/tags/')"
       uses: actions/upload-artifact@v4
       with:
-        name: tr-driver-appimage
-        path: build/tr-driver-*.AppImage
+        name: build-artifacts
+        path: |
+          build/tr-driver-*.AppImage
+          ../tr-driver_*_amd64.deb
         retention-days: 30
