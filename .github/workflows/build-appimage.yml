@@ -65,7 +65,8 @@ jobs:
         cd build
         cmake ..
         make -j"$(nproc)" lcd_driver
-        dpkg-buildpackage -us -uc -b --no-check-builddeps
+        cd ..
+        debuild -us -uc -b
         VERSION=$(head -n1 ../debian/changelog | awk '{print $2}' | tr -d '()')
         mv ../tr-driver_${VERSION}_amd64.deb ./ || true
         echo "Built: tr-driver_${VERSION}_amd64.deb"
