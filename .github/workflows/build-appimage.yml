@@ -34,8 +34,7 @@ jobs:
           devscripts \
           debhelper \
           python3-pil \
-          python3-tk \
-          pkgconf
+          python3-tk
 
         # Install pybind11_json header
         echo "Downloading pybind11_json.hpp..."
