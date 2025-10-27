@@ -1,4 +1,4 @@
-name: Build AppImage and .deb
+name: Build Releases (AppImage and Debian/Ubuntu Package)
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Checkout code
