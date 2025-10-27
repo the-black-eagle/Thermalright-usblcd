@@ -2,7 +2,7 @@
 Type=Application
 Name=tr-driver
 Comment=GUI controller for the LCD driver
-Exec=python3 /usr/bin/tr-driver
+Exec=/usr/bin/tr-driver
 Icon=tr-driver
 Terminal=false
 Categories=Utility;Electronics;Development;
