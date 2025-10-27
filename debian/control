@@ -25,9 +25,7 @@ Depends: ${shlibs:Depends}, ${misc:Depends},
                     python3-opencv,
                     python3-tk,
                     python3-numpy,
-                    libusb-1.0-0,
-                    libopencv-core-dev,
-                    libopencv-imgproc-dev
+                    libusb-1.0-0
 Description: USB LCD System Monitor Driver and GUI
  USB LCD driver and GUI application for displaying real-time system
  information on compatible USB LCD displays.
