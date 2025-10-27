@@ -11,6 +11,14 @@ if [[ -z "$OBJDIR" ]]; then
     exit 1
 fi
 
+# Generate version.py from debian/changelog
+VERSION=$(dpkg-parsechangelog -S Version | sed 's/^[^0-9]*//')  # strip epoch if present
+PYTHON_DIR="$CURDIR/python"
+
+echo "Generating version.py with version ${VERSION}"
+mkdir -p "$PYTHON_DIR"
+echo "__version__ = \"${VERSION}\"" > "$PYTHON_DIR/version.py"
+
 echo "Detected OBJDIR=$OBJDIR"
 
 # 1. Install Python GUI renamed to tr-driver (no .py)
@@ -28,6 +36,10 @@ install -D -m 0644 "$CURDIR/python/themed_messagebox.py" \
 # 1c. Install data directory
 mkdir -p "$CURDIR/debian/tr-driver/usr/share/tr-driver/"
 cp -r "$CURDIR/USBLCD" "$CURDIR/debian/tr-driver/usr/share/tr-driver/"
+
+# 1d. Install generated version.py
+install -D -m 0644 "$PYTHON_DIR/version.py" \
+    "$CURDIR/debian/tr-driver/usr/lib/tr-driver/version.py"
 
 # 2. Install compiled .so to Python dist-packages
 SOFILE=$(ls "$OBJDIR"/lcd_driver*.so 2>/dev/null | head -n1)
