@@ -42,8 +42,30 @@ PYBIND11_MODULE(lcd_driver, m) {
                               vec.size());
          },
          py::arg("video_path") = "",
-         py::arg("image_path") = "");
+         py::arg("image_path") = "")
 
+    .def("update_overlay_rgba", [](BackgroundManager &mgr, const std::string &tag, py::buffer buf, int w, int h, int x, int y){
+         py::buffer_info info = buf.request();
+         const uint8_t* data_ptr = static_cast<const uint8_t*>(info.ptr);
+         mgr.update_overlay_rgba(tag, data_ptr, w, h, x, y);
+    })
+    .def("clear_overlay", &BackgroundManager::clear_overlay)
+    .def("start_lcd_stream", &BackgroundManager::start_lcd_stream, py::arg("video_path") = "", py::arg("image_path") = "")
+    .def("stop_lcd_stream", &BackgroundManager::stop_lcd_stream)
+    .def("get_last_frame_bytes", [](BackgroundManager &mgr){
+         auto vec = mgr.get_last_frame_bytes_vec();
+         if (vec.empty()) return py::bytes();
+         return py::bytes(reinterpret_cast<const char*>(vec.data()), vec.size());
+    })
+    .def("set_error_callback", [](BackgroundManager &mgr, py::function cb){
+         mgr.set_error_callback([cb](const std::string &msg){
+             py::gil_scoped_acquire acquire;
+             try { cb(msg); } catch(const py::error_already_set &e) {
+                 std::cerr << "Python callback exception: " << e.what() << std::endl;
+             }
+         });
+    })
+    ;
 
     m.def("get_background_manager", &get_background_manager, 
         py::return_value_policy::reference);

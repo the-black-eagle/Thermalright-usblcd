@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <ctime>
@@ -189,6 +190,15 @@ class BackgroundManager
 {
 public:
   std::vector<uint8_t> get_background_bytes(const std::string& video_path = "", const std::string& image_path = "");
+   // New streaming / overlay API
+    void start_lcd_stream(const std::string &video_path = "", const std::string &image_path = "");
+    void stop_lcd_stream();
+    void update_overlay_rgba(const std::string &tag, const uint8_t* data, int w, int h, int x, int y);
+    void clear_overlay(const std::string &tag);
+    std::vector<uint8_t> get_last_frame_bytes_vec();
+    void set_error_callback(std::function<void(const std::string&)> cb);
+    bool safe_lcd_write(const uint8_t* data_ptr);
+
 
 private:
   cv::Mat create_default_background();
@@ -205,6 +215,19 @@ private:
   bool has_alpha = false;
   std::string image_path;
   std::string video_path;
+  std::mutex last_frame_mutex;
+   // New members
+    std::mutex overlays_mutex;
+    std::unordered_map<std::string, cv::Mat> overlays_rgba;
+    std::unordered_map<std::string, cv::Point> overlay_pos;
+
+    cv::Mat last_frame; // RGB CV_8UC3
+
+    std::atomic<bool> lcd_stream_running{false};
+    std::atomic<bool> stop_request{false};
+    std::thread lcd_thread;
+    std::mutex lcd_io_mutex;
+    std::function<void(const std::string&)> py_error_callback;
 };
 
 class ConfigManager {

@@ -1610,6 +1610,215 @@ BackgroundManager& get_background_manager()
   return bg_manager;
 }
 
+// ------------------ BackgroundManager streaming & overlays implementation ------------------
+
+// Helper: alpha blend RGBA src into BGR dst at (ox,oy)
+static void alpha_blend_bgr(cv::Mat &dst, const cv::Mat &src, int ox, int oy)
+{
+    // dst: CV_8UC3 (BGR)
+    // src: CV_8UC4 (BGRA or RGBA depending on how you prepare it)
+    if (dst.empty() || src.empty()) return;
+    // Ensure types
+    if (dst.type() != CV_8UC3 || src.type() != CV_8UC4) return;
+
+    int w = src.cols;
+    int h = src.rows;
+    for (int row = 0; row < h; ++row)
+    {
+        int dy = oy + row;
+        if (dy < 0 || dy >= dst.rows) continue;
+        const cv::Vec4b* srow = src.ptr<cv::Vec4b>(row);
+        cv::Vec3b* drow = dst.ptr<cv::Vec3b>(dy);
+        for (int col = 0; col < w; ++col)
+        {
+            int dx = ox + col;
+            if (dx < 0 || dx >= dst.cols) continue;
+
+            const cv::Vec4b &sp = srow[col];
+            unsigned char a = sp[3];
+            if (a == 0) continue;
+
+            float alpha = a / 255.0f;
+            cv::Vec3b &dp = drow[dx];
+
+            // Assuming src is BGRA order; if your bytes are RGBA, convert before storing
+            dp[0] = static_cast<unsigned char>(sp[0] * alpha + dp[0] * (1.0f - alpha));
+            dp[1] = static_cast<unsigned char>(sp[1] * alpha + dp[1] * (1.0f - alpha));
+            dp[2] = static_cast<unsigned char>(sp[2] * alpha + dp[2] * (1.0f - alpha));
+        }
+    }
+}
+
+// Update overlay RGBA from Python (data points to contiguous RGBA bytes)
+void BackgroundManager::update_overlay_rgba(const std::string &tag,
+                                            const uint8_t* data, int w, int h, int x, int y)
+{
+    if (!data || w <= 0 || h <= 0) return;
+    try {
+        // Wrap input bytes with Mat header (RGBA)
+        cv::Mat tmp_rgba(h, w, CV_8UC4, const_cast<uint8_t*>(data));
+        // Convert RGBA -> BGRA because OpenCV tends to use BGR ordering
+        cv::Mat tmp_bgra;
+        cv::cvtColor(tmp_rgba, tmp_bgra, cv::COLOR_RGBA2BGRA);
+
+        std::lock_guard<std::mutex> lk(overlays_mutex);
+        overlays_rgba[tag] = tmp_bgra.clone(); // store BGRA
+        overlay_pos[tag] = cv::Point(x, y);
+    } catch (const std::exception &e) {
+        std::cerr << "update_overlay_rgba exception: " << e.what() << std::endl;
+    }
+}
+
+void BackgroundManager::clear_overlay(const std::string &tag)
+{
+    std::lock_guard<std::mutex> lk(overlays_mutex);
+    overlays_rgba.erase(tag);
+    overlay_pos.erase(tag);
+}
+
+void BackgroundManager::set_error_callback(std::function<void(const std::string&)> cb)
+{
+    py_error_callback = std::move(cb);
+}
+
+void BackgroundManager::stop_lcd_stream()
+{
+    stop_request.store(true);
+    // Let thread exit; lcd_stream_running will be cleared once it finishes
+    if (lcd_thread.joinable())
+    {
+        // we avoid blocking join here because thread is detached in start_lcd_stream;
+        // if you prefer a join, set a join policy.
+    }
+}
+
+
+bool BackgroundManager::safe_lcd_write(const uint8_t* data_ptr)
+{
+    std::lock_guard<std::mutex> devlk(lcd_io_mutex);
+    return update_lcd_image(data_ptr); // your existing USB send
+}
+// Streaming compositor: runs in background thread, composes frame and sends to LCD at ~25 FPS
+void BackgroundManager::start_lcd_stream(const std::string &video_path_in, const std::string &image_path_in)
+{
+    // Prevent multiple starts
+    if (lcd_stream_running.load()) return;
+
+    stop_request.store(false);
+    lcd_stream_running.store(true);
+
+    // Copy paths local to thread (if given). If you manage global state, adapt as needed.
+    std::string video_path_local = video_path_in.empty() ? this->video_path : video_path_in;
+    std::string image_path_local = image_path_in.empty() ? this->image_path : image_path_in;
+
+    lcd_thread = std::thread([this, video_path_local, image_path_local]() {
+        try {
+            while (!stop_request.load())
+            {
+                // 1) get background frame (this uses your existing get_background implementation)
+                cv::Mat frame = this->get_background(video_path_local, image_path_local); // may be BGR or BGRA
+
+                if (frame.empty()) {
+                    // create fallback if necessary
+                    frame = this->create_default_background();
+                }
+
+                // Ensure BGR CV_8UC3 for blending
+                cv::Mat base;
+                if (frame.channels() == 4) {
+                    cv::cvtColor(frame, base, cv::COLOR_BGRA2BGR);
+                } else if (frame.channels() == 3) {
+                    base = frame;
+                } else {
+                    // unexpected channels, convert to BGR
+                    cv::cvtColor(frame, base, cv::COLOR_GRAY2BGR);
+                }
+
+                // 2) Blend overlays
+                {
+                    std::lock_guard<std::mutex> lk(overlays_mutex);
+                    for (auto &kv : overlays_rgba) {
+                        const std::string &tag = kv.first;
+                        const cv::Mat &ov = kv.second;
+                        auto itp = overlay_pos.find(tag);
+                        int ox = 0, oy = 0;
+                        if (itp != overlay_pos.end()) { ox = itp->second.x; oy = itp->second.y; }
+                        if (!ov.empty()) {
+                            alpha_blend_bgr(base, ov, ox, oy);
+                        }
+                    }
+                }
+
+                // 3) Convert base BGR -> RGB for sending & for storing last_frame
+                cv::Mat rgb_img;
+                cv::cvtColor(base, rgb_img, cv::COLOR_BGR2RGB);
+
+                // Store last_frame (thread-safe)
+                {
+                    std::lock_guard<std::mutex> lk(last_frame_mutex);
+                    last_frame = rgb_img.clone();
+                }
+
+                // 4) Send to LCD - call your existing function that sends bytes to device
+                // convert to contiguous buffer if needed
+                cv::Mat send_img;
+                if (!rgb_img.isContinuous()) send_img = rgb_img.clone();
+                else send_img = rgb_img;
+
+                const uint8_t *data_ptr = send_img.ptr<uint8_t>(0);
+
+                bool ok = false;
+                try {
+                    ok = safe_lcd_write(data_ptr); // your existing USB write function that returns bool
+                } catch (const std::exception &e) {
+                    std::cerr << "update_lcd_image threw: " << e.what() << std::endl;
+                    ok = false;
+                }
+
+                if (!ok) {
+                    // notify python and stop streaming for manual resume
+                    if (py_error_callback) {
+                        try {
+                            py_error_callback("LCD communication failed. Click OK to retry.");
+                        } catch (const std::exception &e) {
+                            std::cerr << "py_error_callback threw: " << e.what() << std::endl;
+                        }
+                    }
+                    break; // exit streaming loop (Python will show modal and call start again)
+                }
+
+                // 5) Sleep to target ~25 FPS (40ms). If video has timing/sync features use that instead.
+                std::this_thread::sleep_for(std::chrono::milliseconds(40));
+            }
+        } catch (const std::exception &e) {
+            if (py_error_callback) {
+                try { py_error_callback(std::string("LCD stream exception: ") + e.what()); } catch(...) {}
+            }
+        }
+
+        lcd_stream_running.store(false);
+    });
+
+    // detach the thread to continue running independently; stop_lcd_stream flips flag to stop
+    lcd_thread.detach();
+}
+
+// Returns last composited frame as bytes (RGB)
+std::vector<uint8_t> BackgroundManager::get_last_frame_bytes_vec()
+{
+    std::lock_guard<std::mutex> lk(last_frame_mutex);
+    if (last_frame.empty()) return {};
+    cv::Mat out;
+    if (!last_frame.isContinuous()) out = last_frame.clone();
+    else out = last_frame;
+    size_t n = out.total() * out.elemSize();
+    std::vector<uint8_t> vec(out.ptr<uint8_t>(0), out.ptr<uint8_t>(0) + n);
+    return vec;
+}
+
+// --------------------------------------------------------------------------------------------
+
+
 void VideoBackground::start_playback()
 {
   if (_playing)

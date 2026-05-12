@@ -276,7 +276,6 @@ class BackgroundSelector(tk.Frame):
                     continue
                 try:
                     img = Image.open(path)
-                    #img = img.thumbnail(img_size, Image.Resampling.BILINEAR)
                     photo = ImageTk.PhotoImage(img)
 
                     # Frame around image for border effect
