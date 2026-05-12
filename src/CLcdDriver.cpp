@@ -938,195 +938,103 @@ static std::string hex_str(const uint8_t* data, size_t len)
 
 bool handshake_with_device()
 {
-  scsi_log("[HANDSHAKE] Starting full handshake");
-  if (!_dev)
-  {
-    scsi_log("[HANDSHAKE] No device handle");
-    return false;
-  }
+  scsi_log("Starting handshake");
 
-  // Hard-coded endpoints for this device
-  constexpr unsigned char EP_OUT = 0x02;
-  constexpr unsigned char EP_IN = 0x81;
-
-  // CDBs we use
+  // Define CDBs
+  const std::vector<uint8_t> inquiry_cdb = {0x12, 0, 0, 0, 36, 0}; // INQUIRY (alloc 36)
   const std::vector<uint8_t> tur_cdb(6, 0x00); // TEST UNIT READY
   const std::vector<uint8_t> sense_cdb = {0x03, 0, 0, 0, 18, 0}; // REQUEST SENSE (18)
-  const std::vector<uint8_t> mode_cdb = {0x1A, 0, 0, 0, 192, 0}; // MODE SENSE(6) (alloc 192)
-  const std::vector<uint8_t> inquiry_cdb = {0x12, 0, 0, 0, 36, 0}; // INQUIRY (alloc 36)
 
-  // vendor CDBs
-  std::vector<uint8_t> f5_cdb(16, 0x00);
-  f5_cdb[0] = 0xF5; // generic vendor 0xF5 (full-read CDB)
-
-  // APIX probe CDB (16 bytes exactly)
-  const std::vector<uint8_t> apix_cdb = {
-      0xF5, // opcode
-      0x41, 0x50, 0x49, 0x58, // "APIX"
-      0xB3, 0x0C, 0x00, 0x00, // observed param (from trace)
-      0x00, 0x00, 0x00, 0x00, // padding/reserved
-      0x00, 0x00, 0x00 // padding/reserved (total 16 bytes)
+  // Poll command - read device state
+  const std::vector<uint8_t> poll_cdb = {
+      0xF5, 0x00, 0x00, 0x00, // poll command
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // 16 bytes total
   };
 
-  const size_t splash_size = 57627;
-  const auto overall_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  // Init command - take control (send 0xE100 zeros)
+  const std::vector<uint8_t> init_cdb = {
+      0xF5, 0x01, 0x00, 0x00, // init command
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // 16 bytes total
+  };
 
-  // ---------------- Stage 1: preconditioning loop ----------------
-  while (std::chrono::steady_clock::now() < overall_deadline)
+  const size_t POLL_SIZE = 0xE100; // 57600 bytes
+  std::vector<uint8_t> poll_response(POLL_SIZE);
+  std::vector<uint8_t> init_data(POLL_SIZE, 0x00); // 0xE100 zeros
+   ScsiResult res;
+
+  // Stage 1: Device identification
+  scsi_log("Stage 1: INQUIRY");
+  res = send_scsi_command(_dev, inquiry_cdb, {}, 0, 36);
+  if (!res.ok)
   {
-    try
-    {
-      scsi_log("[HANDSHAKE] Stage 1: TUR");
-      ScsiResult tur = send_scsi_command(_dev, tur_cdb, {}, 0);
-
-      if (tur.ok)
-      {
-        scsi_log("[HANDSHAKE] TUR Good -> Stage 1 satisfied");
-        break;
-      }
-
-      if (tur.status == 1)
-      { // Check Condition
-        scsi_log("[HANDSHAKE] TUR Check Condition -> Request Sense");
-        ScsiResult sense = send_scsi_command(_dev, sense_cdb, {}, 18);
-        if (!sense.data.empty() && sense.data.size() >= 14)
-        {
-          uint8_t key = sense.data[2] & 0x0F;
-          uint8_t asc = sense.data[12];
-          uint8_t ascq = sense.data[13];
-          scsi_log("[HANDSHAKE] Sense key=" + std::to_string(key) + " ASC=0x" + hex_str(asc) +
-                   " ASCQ=0x" + hex_str(ascq));
-        }
-        else
-        {
-          scsi_log("[HANDSHAKE] Malformed/empty Request Sense -> resetting "
-                   "transport and continuing");
-          reset_transport();
-        }
-      }
-
-      scsi_log("[HANDSHAKE] Stage 1: Mode Sense(6)");
-      ScsiResult mode = send_scsi_command(_dev, mode_cdb, {}, 192);
-      if (mode.ok)
-      {
-        scsi_log("[HANDSHAKE] Mode Sense OK -> Stage 1 satisfied");
-        break;
-      }
-      else
-      {
-        if (mode.status == 1)
-        {
-          scsi_log("[HANDSHAKE] Mode Sense Check Condition -> Request Sense");
-          ScsiResult sense2 = send_scsi_command(_dev, sense_cdb, {}, 18);
-          if (sense2.data.size() < 14)
-          {
-            scsi_log("[HANDSHAKE] Malformed Request Sense after Mode Sense -> "
-                     "resetting transport");
-            reset_transport();
-          }
-        }
-      }
-    }
-    catch (const std::exception& e)
-    {
-      scsi_log(std::string("[HANDSHAKE] Exception in Stage1: ") + e.what());
-      reset_transport();
-    }
-
-    // small backoff to match Windows probing rhythm
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  }
-
-  if (std::chrono::steady_clock::now() >= overall_deadline)
-  {
-    scsi_log("[HANDSHAKE] Timeout: Stage 1 did not settle");
+    scsi_log("INQUIRY failed");
     return false;
   }
 
-  // ---------------- Stage 2: Inquiry -> APIX probe -> full payload
-  // ----------------
-  scsi_log("[HANDSHAKE] Stage 2: TUR + Sense + Inquiry + APIX sequence");
+  // Stage 2: Poll device state (with retries for animation interrupt)
+  scsi_log("Stage 2: Polling device");
+  const int MAX_POLL_ATTEMPTS = 10;
+  bool device_ready = false;
 
-  try
+  for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS && !device_ready; ++attempt)
   {
-    //// TUR first
-    // scsi_log("[HANDSHAKE] Sending TUR...");
-    // ScsiResult tur = send_scsi_command(_dev, tur_cdb, {}, 0);
-    // scsi_log("[HANDSHAKE] TUR ok=" + std::to_string(tur.ok));
-
-    // if (!tur.ok)
-    //{
-    // scsi_log("[HANDSHAKE] TUR failed, sending Request Sense...");
-    // ScsiResult sense = send_scsi_command(_dev, sense_cdb, {}, 18);
-    // if (!sense.data.empty() && sense.data.size() >= 14)
-    //{
-    // uint8_t key = sense.data[2] & 0x0F;
-    // uint8_t asc = sense.data[12];
-    // uint8_t ascq = sense.data[13];
-    // scsi_log("[HANDSHAKE] Sense key=" + std::to_string(key) + " ASC=0x" +
-    // hex_str(asc) + " ASCQ=0x" + hex_str(ascq));
-    // }
-    // }
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    scsi_log("[HANDSHAKE] Sending Inquiry...");
-    ScsiResult inq_res = send_scsi_command(_dev, inquiry_cdb, {}, 36, 0x628bf560);
-    scsi_log("[HANDSHAKE] Inquiry ok=" + std::to_string(inq_res.ok) +
-             " bytes=" + std::to_string(inq_res.data.size()));
-
-    if (!inq_res.ok || inq_res.data.empty())
+    if (attempt > 0)
     {
-      scsi_log("[HANDSHAKE] Inquiry failed");
-      return false;
+      scsi_log("Poll attempt " + std::to_string(attempt + 1) + "/" +
+               std::to_string(MAX_POLL_ATTEMPTS));
+      std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    std::ostringstream oss;
-    for (size_t i = 0; i < inq_res.data.size(); i++)
+    res = send_scsi_command(_dev, poll_cdb, poll_response, POLL_SIZE,0);
+    if (!res.ok)
     {
-      oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(inq_res.data[i])
-          << " ";
-    }
-    scsi_log("[HANDSHAKE] Inquiry data: " + oss.str());
-
-    // 2) Send APIX probe (0xF5 with "APIX" payload)
-    scsi_log("[HANDSHAKE] Sending APIX probe...");
-    ScsiResult apix_res = send_scsi_command(_dev, apix_cdb, {}, 12, 1653339488);
-    scsi_log("[HANDSHAKE] APIX ok=" + std::to_string(apix_res.ok) +
-             " bytes=" + std::to_string(apix_res.data.size()));
-    if (!apix_res.ok)
-    {
-      scsi_log("[HANDSHAKE] APIX probe failed");
-      return false;
+      scsi_log("Poll command failed, retrying...");
+      continue;
     }
 
-    // 3) Request full payload
-    scsi_log("[HANDSHAKE] Requesting full payload...");
-    ScsiResult full_res = send_scsi_command(_dev, f5_cdb, {}, splash_size, 1653339488);
-    scsi_log("[HANDSHAKE] Full payload ok=" + std::to_string(full_res.ok) +
-             " bytes=" + std::to_string(full_res.data.size()));
-    if (!full_res.ok || full_res.data.empty())
-    {
-      scsi_log("[HANDSHAKE] Full payload failed");
-      return false;
+    // Check device state
+    uint8_t resolution_marker = poll_response[0];
+    uint32_t boot_status = *reinterpret_cast<uint32_t*>(&poll_response[4]);
+
+    if (boot_status == 0xA4A3A2A1)
+    { // Little-endian 0xA1A2A3A4
+      scsi_log("Device still booting, waiting...");
+      continue;
     }
 
-    // 4) Echo payload straight back
-    scsi_log("[HANDSHAKE] Echoing payload back, bytes=" + std::to_string(full_res.data.size()));
-    ScsiResult echo = send_scsi_command(_dev, f5_cdb, full_res.data, 0, 1653339488);
-    if (!echo.ok)
-    {
-      scsi_log("[HANDSHAKE] Echo failed");
-      return false;
+    // Check for valid resolution marker
+    if (resolution_marker == 0x24 || // 240x240
+        resolution_marker == 0x32 || // 320x240 ('2')
+        resolution_marker == 0x33 || // 320x240 ('3')
+        resolution_marker == 0x64 || // 320x320 ('d')
+        resolution_marker == 0x65)
+    { // 320x320 ('e')
+      scsi_log("Device ready, resolution marker: 0x" + std::to_string(resolution_marker));
+      device_ready = true;
     }
-
-    scsi_log("[HANDSHAKE] Stage 2 complete (Inquiry + APIX + full payload + echo)");
-    return true;
+    else
+    {
+      scsi_log("Unexpected resolution marker: 0x" + std::to_string(resolution_marker));
+    }
   }
-  catch (const std::exception& e)
+
+  if (!device_ready)
   {
-    scsi_log(std::string("[HANDSHAKE] Exception in Stage 2: ") + e.what());
+    scsi_log("Device failed to become ready after " + std::to_string(MAX_POLL_ATTEMPTS) +
+             " attempts");
     return false;
   }
+
+  // Stage 3: Initialize display (interrupt animation)
+  scsi_log("Stage 3: Initializing display (sending 0xE100 zeros)");
+  res = send_scsi_command(_dev, init_cdb, init_data, 0, POLL_SIZE);
+  if (!res.ok)
+  {
+    scsi_log("Init command failed");
+    return false;
+  }
+
+  scsi_log("Handshake complete - display control acquired");
+  return true;
 }
 
 bool device_ready()
