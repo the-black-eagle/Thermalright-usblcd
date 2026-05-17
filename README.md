@@ -215,11 +215,9 @@ Since Thermalright has no plans to provide a Linux driver, this project aims to 
 - All media and configuration files are in the `USBLCD/` directory
 
 ### Known Limitations
-- **Startup animation:** Cannot be interrupted yet (~60 second wait required on device power-on)
-- **Handshake code:** Exists but not fully functional - WIP
 - **NVIDIA/Intel GPU monitoring:** Untested (author has AMD hardware only)
 
-If the driver loses communication with the LCD, it will display a notification. Once the startup animation completes, click OK to resume.
+If the driver loses communication with the LCD, it will display a notification and attempt to re-connect. If it fails to re-connect within one minute it will exit.
 
 ---
 
@@ -240,7 +238,7 @@ sudo udevadm trigger
 ```
 
 ### LCD Stuck on Startup Animation
-This is expected behaviour. Wait approximately 60 seconds for the device's built-in startup animation to complete. The handshake code to bypass this is still under development.
+Code has been re-written to avoid this. If you still experience this issue, update to the lastest version.
 
 ### Build Fails: "pybind11_json.hpp not found"
 Install the header file manually:
@@ -282,7 +280,7 @@ If the LCD is updating but the GUI preview isn't:
 
 - ✅ ~~AppImage packaging~~ (Complete!)
 - ✅ ~~GitHub Actions CI/CD~~ (Complete!)
-- ⏳ Fix startup handshake to skip animation
+- ✅ Fix startup handshake to skip animation (complete)
 - ⏳ Test and fix NVIDIA/Intel GPU monitoring
 - ⏳ Alternative frontends (Electron, GTK4, Qt)
 - ⏳ Debian/Ubuntu `.deb` packages
@@ -299,7 +297,7 @@ Contributions are welcome! Areas where help is especially needed:
 
 - **Testing:** Different distros, desktop environments, hardware configs
 - **GPU Monitoring:** NVIDIA/Intel support (untested by author)
-- **Startup Handshake:** Help reverse-engineer the device protocol
+- **Startup Handshake:** Thanks to https://github.com/Lexonight1 for pointing the way !!
 - **UI Alternatives:** GTK, Qt, or web-based frontends
 - **Documentation:** Improve docs, add translations
 - **Packaging:** Help with distro-specific packages
