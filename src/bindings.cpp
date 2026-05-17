@@ -13,10 +13,9 @@ PYBIND11_MODULE(lcd_driver, m) {
         .def("get_info", &SystemInfoPoller::get_info)
         .def("get_available_metrics", &SystemInfoPoller::get_available_metrics);
 
-    m.def("init_dev", &init_dev, py::arg("vid") = 0x0402, py::arg("pid") = 0x3922);
+    m.def("init_dev", &init_dev);
     m.def("cleanup_dev", &cleanup_dev);
     m.def("device_ready", &device_ready);
-    m.def("reset_transport", &reset_transport);
     m.def("handshake_with_device", &handshake_with_device);
     
     py::class_<ConfigManager>(m, "ConfigManager")
@@ -63,6 +62,14 @@ PYBIND11_MODULE(lcd_driver, m) {
              try { cb(msg); } catch(const py::error_already_set &e) {
                  std::cerr << "Python callback exception: " << e.what() << std::endl;
              }
+         });
+    })
+    // =================================================================
+    // NEW: Overwrite the callback with a capture-less dummy lambda
+    // =================================================================
+    .def("clear_error_callback", [](BackgroundManager &mgr){
+         mgr.set_error_callback([](const std::string &msg){
+             // Intentionally empty. Captures zero Python references!
          });
     })
     ;
