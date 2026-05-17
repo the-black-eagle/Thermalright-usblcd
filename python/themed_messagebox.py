@@ -134,9 +134,10 @@ class ThemedMessageBox(tk.Toplevel):
             btn.bind("<Leave>", lambda e, b=btn, c=bg_color: b.config(bg=c))
         
         # Bind Enter and Escape keys
-        self.bind("<Return>", lambda e: self._on_button_click(buttons[0][1]))
-        if len(buttons) > 1:
-            self.bind("<Escape>", lambda e: self._on_button_click(buttons[-1][1]))
+        if buttons:
+            self.bind("<Return>", lambda e: self._on_button_click(buttons[0][1]))
+            if len(buttons) > 1:
+                self.bind("<Escape>", lambda e: self._on_button_click(buttons[-1][1]))
     
     def _on_button_click(self, value):
         """Handle button click"""
@@ -189,6 +190,16 @@ def showerror(title, message, parent=None):
     )
     return dialog.show()
 
+def showcommserror(title, message, parent=None):
+    """Show an error message with no buttons on comms errors"""
+    dialog = ThemedMessageBox(
+        parent or tk._default_root,
+        title,
+        message,
+        icon_type="error",
+        buttons=[]
+    )
+    return dialog
 
 def showwarning(title, message, parent=None):
     """Show a warning message dialog"""
