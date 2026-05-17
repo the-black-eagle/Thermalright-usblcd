@@ -109,7 +109,7 @@ jobs:
           3. Run: `tr-driver`
           
           ### Changes
-          See [CHANGELOG.md](CHANGELOG.md) for details.
+          See [changelog](debian/changelog) for details.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
