@@ -38,11 +38,11 @@ If you see output like `Bus 001 Device 005: ID 0402:3922 ALi Corp. USBLCD`, you'
 If not, this driver won't work with your device.
 
 > **Note:** Thermalright has no plans to provide official Linux drivers. This is a community-built alternative that replicates the Windows software functionality.
-This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to @Lexonight1 for revealing how to interrupt the boot animation.
+This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to @lexonight for revealing how to interrupt the boot animation.
 
 Now uses sg_io to talk to the LCD removing a lot of code trying to get libusb to behave correctly.
 
-Backend C++ driver for obtaning metrics and talking to the LCD.  Capable of 25fps for smooth playback.
+Backend C++ driver for obtaining metrics and talking to the LCD.  Capable of 25fps for smooth playback.
 
 ---
 
@@ -217,7 +217,7 @@ Since Thermalright has no plans to provide a Linux driver, this project aims to 
 ### Known Limitations
 - **NVIDIA/Intel GPU monitoring:** Untested (author has AMD hardware only)
 
-If the driver loses communication with the LCD, it will display a notification and attempt to re-connect. If it fails to re-connect within one minute it will exit.
+If communication with the LCD is lost, the driver will display a notification and attempt to re-connect. If it fails to re-connect within one minute it will exit.
 
 ---
 
