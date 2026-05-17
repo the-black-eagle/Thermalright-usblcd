@@ -38,7 +38,7 @@ If you see output like `Bus 001 Device 005: ID 0402:3922 ALi Corp. USBLCD`, you'
 If not, this driver won't work with your device.
 
 > **Note:** Thermalright has no plans to provide official Linux drivers. This is a community-built alternative that replicates the Windows software functionality.
-This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to @lexonight for revealing how to interrupt the boot animation.
+This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to [@lexonight](https://github.com/Lexonight1) for revealing how to interrupt the boot animation.
 
 Now uses sg_io to talk to the LCD removing a lot of code trying to get libusb to behave correctly.
 
@@ -297,7 +297,7 @@ Contributions are welcome! Areas where help is especially needed:
 
 - **Testing:** Different distros, desktop environments, hardware configs
 - **GPU Monitoring:** NVIDIA/Intel support (untested by author)
-- **Startup Handshake:** Thanks @Lexonight1 for pointing the way !!
+- **Startup Handshake:** Thanks [@lexonight](https://github.com/Lexonight1) for pointing the way !!
 - **UI Alternatives:** GTK, Qt, or web-based frontends
 - **Documentation:** Improve docs, add translations
 - **Packaging:** Help with distro-specific packages
@@ -354,6 +354,7 @@ If this project helped you, consider:
 - Thermalright for the hardware (even without official Linux support!)
 - The open-source community for the amazing tools that made this possible
 - All contributors and testers who helped improve this project
+- This project supports, but is independent of [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux)
 
 ---
 
