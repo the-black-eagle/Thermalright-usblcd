@@ -259,7 +259,7 @@ private:
   nlohmann::json _data;
 };
 
-// --- USB helpers ---
+// --- Comms helpers ---
 
 struct ScsiResult
 {
