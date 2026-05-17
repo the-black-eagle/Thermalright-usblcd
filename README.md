@@ -38,6 +38,11 @@ If you see output like `Bus 001 Device 005: ID 0402:3922 ALi Corp. USBLCD`, you'
 If not, this driver won't work with your device.
 
 > **Note:** Thermalright has no plans to provide official Linux drivers. This is a community-built alternative that replicates the Windows software functionality.
+This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to https://github.com/Lexonight1 for revealing how to interrupt the boot animation.
+
+Now uses sg_io to talk to the LCD removing a lot of code trying to get libusb to behave correctly.
+
+Backend C++ driver for obtaning metrics and talking to the LCD.  Capable of 25fps for smooth playback.
 
 ---
 
@@ -90,7 +95,6 @@ These badges update automatically when a new tag is pushed or a release is publi
 |------------|---------|--------------------------|------|
 | **g++ / clang++** | Build C++17 code | `sudo apt install g++` | [GCC](https://gcc.gnu.org/) |
 | **CMake ≥ 3.16** | Build system | `sudo apt install cmake` | [CMake](https://cmake.org/download/) |
-| **libusb-1.0** | USB device access | `sudo apt install libusb-1.0-0-dev` | [libusb](https://libusb.info/) |
 | **Python 3.10+** | Frontend GUI | `sudo apt install python3 python3-dev python3-pip` | [Python](https://www.python.org/) |
 | **pybind11** | Python bindings | `sudo apt install pybind11-dev` | [pybind11](https://github.com/pybind/pybind11) |
 | **pybind11_json** | JSON conversion | [Download header](https://raw.githubusercontent.com/pybind/pybind11_json/master/include/pybind11_json/pybind11_json.hpp) to `/usr/local/include/` | [pybind11_json](https://github.com/pybind/pybind11_json) |
