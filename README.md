@@ -280,7 +280,7 @@ If the LCD is updating but the GUI preview isn't:
 
 - ✅ ~~AppImage packaging~~ (Complete!)
 - ✅ ~~GitHub Actions CI/CD~~ (Complete!)
-- ✅ Fix startup handshake to skip animation (complete)
+- ✅ ~~Fix startup handshake to skip animation~~ (complete)
 - ⏳ Test and fix NVIDIA/Intel GPU monitoring
 - ⏳ Alternative frontends (Electron, GTK4, Qt)
 - ⏳ Debian/Ubuntu `.deb` packages
@@ -297,7 +297,7 @@ Contributions are welcome! Areas where help is especially needed:
 
 - **Testing:** Different distros, desktop environments, hardware configs
 - **GPU Monitoring:** NVIDIA/Intel support (untested by author)
-- **Startup Handshake:** Thanks to https://github.com/Lexonight1 for pointing the way !!
+- **Startup Handshake:** Thanks @Lexonight1 for pointing the way !!
 - **UI Alternatives:** GTK, Qt, or web-based frontends
 - **Documentation:** Improve docs, add translations
 - **Packaging:** Help with distro-specific packages
