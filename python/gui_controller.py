@@ -48,12 +48,12 @@ def wait_for_lcd_ready(lcd_driver):
     return True
 
 
-def on_reset_click():
-    try:
-        lcd_driver.reset_transport()
-        print("Transport reset triggered")
-    except Exception as e:
-        print(f"Reset failed: {e}", file=sys.stderr)
+# def on_reset_click():
+    # try:
+        # lcd_driver.reset_transport()
+        # print("Transport reset triggered")
+    # except Exception as e:
+        # print(f"Reset failed: {e}", file=sys.stderr)
 
 
 def get_resource_base():
@@ -3134,13 +3134,30 @@ class LCDController:
             self.root.focus_force()  # grab focus
         except Exception:
             pass
-        messagebox.showerror(
-            "TR Driver", "LCD communication failed. Click OK when LCD is ready"
+        error_dialog = messagebox.showcommserror(
+            "TR Driver", "LCD communication failed\n\nAttempting to reconnect....."
         )
-        if not lcd_driver.init_dev():
+
+        # Attempt to recover comms for up to 1 minute - blocking here is fine because with no LCD
+        # there is nothing to be done anyway
+        MAX_TRIES = 120
+        attempts = 0
+        lcd_ready = False
+        while not lcd_ready:
+            if not lcd_driver.init_dev():
+                time.sleep(0.5) # wait for 500ms
+                attempts += 1
+            else:
+                lcd_ready = True
+                break
+            if attempts > MAX_TRIES:
+                break
+
+        if not lcd_ready: # LCD away for over 1 minute.  Give up trying to connect
             messagebox.showerror("TR Driver", "Failed to initialize USB device")
             exit(1)
-        # Resume updates after OK is clicked
+        # Resume updates after comms re-established
+        error_dialog.destroy()
         self._paused.set()
         # Trigger immediate update
         self.update_display_immediately()
@@ -3480,6 +3497,19 @@ class LCDController:
         # Wait for thread to finish (with timeout)
         if self._update_thread.is_alive():
             self._update_thread.join(timeout=1.0)
+        # 1. Stop the C++ background thread loops
+        try:
+            mgr = lcd_driver.get_background_manager()
+            mgr.stop_lcd_stream()
+        except Exception:
+            pass
+
+        # 2. FORCE C++ TO DESTROY THE CAPTURED PYTHON CALLBACK
+        try:
+            mgr = lcd_driver.get_background_manager()
+            mgr.clear_error_callback()  # Triggers safe deletion of 'cb' right here!
+        except Exception as e:
+            print(f"Failed to clear C++ error callback: {e}")
 
 
 if __name__ == "__main__":
