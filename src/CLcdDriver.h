@@ -199,7 +199,6 @@ public:
   void start_lcd_stream(const std::string& video_path = "", const std::string& image_path = "");
   void stop_lcd_stream();
   void update_overlay_rgba(const std::string& tag, const uint8_t* data, int w, int h, int x, int y);
-  void clear_overlay(const std::string& tag);
   std::vector<uint8_t> get_last_frame_bytes_vec();
   void set_error_callback(std::function<void(const std::string&)> cb);
   bool safe_lcd_write(const uint8_t* data_ptr);
@@ -278,9 +277,6 @@ void cleanup_dev();
 bool device_ready();
 std::vector<uint8_t> build_cdb(uint32_t cmd, uint32_t size);
 bool handshake_with_device();
-
-void reset_transport();
-void log_sense(const ScsiResult& result);
 
 //internal routines
 

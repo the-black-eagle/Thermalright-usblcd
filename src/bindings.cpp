@@ -48,7 +48,6 @@ PYBIND11_MODULE(lcd_driver, m) {
          const uint8_t* data_ptr = static_cast<const uint8_t*>(info.ptr);
          mgr.update_overlay_rgba(tag, data_ptr, w, h, x, y);
     })
-    .def("clear_overlay", &BackgroundManager::clear_overlay)
     .def("start_lcd_stream", &BackgroundManager::start_lcd_stream, py::arg("video_path") = "", py::arg("image_path") = "")
     .def("stop_lcd_stream", &BackgroundManager::stop_lcd_stream)
     .def("get_last_frame_bytes", [](BackgroundManager &mgr){

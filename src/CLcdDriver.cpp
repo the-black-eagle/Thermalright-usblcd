@@ -31,8 +31,7 @@
 
 static constexpr int WIDTH = 320;
 static constexpr int HEIGHT = 240;
-static uint32_t TAG = 1;
-static bool DEBUG = true;
+static bool DEBUG = false;
 
 BackgroundManager bg_manager;
 
@@ -894,38 +893,6 @@ static void scsi_log(const std::string& msg)
        << ms.count() << " " << msg << std::endl;
 }
 
-void log_sense(const ScsiResult& result)
-{
-  if (!DEBUG)
-    return;
-  std::ofstream log("scsi_log.txt", std::ios::app);
-  if (result.data.size() >= 14)
-  {
-    uint8_t key = result.data[2] & 0x0F;
-    uint8_t asc = result.data[12];
-    uint8_t ascq = result.data[13];
-    log << "[SENSE] key=" << (int)key << " ASC=0x" << std::hex << (int)asc << " ASCQ=0x"
-        << (int)ascq << std::dec << "\n";
-  }
-  log.close();
-}
-
-static std::string hex_str(uint8_t val)
-{
-  std::ostringstream oss;
-  oss << std::hex << std::setw(2) << std::setfill('0') << (int)val;
-  return oss.str();
-}
-
-static std::string hex_str(const uint8_t* data, size_t len)
-{
-  std::ostringstream oss;
-  for (size_t i = 0; i < len; ++i)
-  {
-    oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]) << " ";
-  }
-  return oss.str();
-}
 
 std::vector<uint8_t> build_cdb(uint32_t cmd, uint32_t size)
 {
@@ -1012,8 +979,6 @@ bool device_ready()
   // TEST UNIT READY
   std::vector<uint8_t> tur_cdb(6, 0x00);
   auto res = send_scsi_command(tur_cdb, {}, 0);
-  // log_sense(res);
-
   if (res.ok)
   {
     return true;
@@ -1421,13 +1386,6 @@ void BackgroundManager::update_overlay_rgba(
   {
     std::cerr << "update_overlay_rgba exception: " << e.what() << std::endl;
   }
-}
-
-void BackgroundManager::clear_overlay(const std::string& tag)
-{
-  std::lock_guard<std::mutex> lk(overlays_mutex);
-  overlays_rgba.erase(tag);
-  overlay_pos.erase(tag);
 }
 
 void BackgroundManager::set_error_callback(std::function<void(const std::string&)> cb)
