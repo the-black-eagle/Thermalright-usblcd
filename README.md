@@ -38,7 +38,7 @@ If you see output like `Bus 001 Device 005: ID 0402:3922 ALi Corp. USBLCD`, you'
 If not, this driver won't work with your device.
 
 > **Note:** Thermalright has no plans to provide official Linux drivers. This is a community-built alternative that replicates the Windows software functionality.
-This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to https://github.com/Lexonight1 for revealing how to interrupt the boot animation.
+This driver was reverse engineered using usb captures from Windows initially.  Thanks must go to@Lexonight1 for revealing how to interrupt the boot animation.
 
 Now uses sg_io to talk to the LCD removing a lot of code trying to get libusb to behave correctly.
 
