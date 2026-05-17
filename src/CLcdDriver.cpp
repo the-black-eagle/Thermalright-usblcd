@@ -18,19 +18,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <numeric>
 #include <sstream>
 
+#include <dirent.h>
 #include <dlfcn.h>
-#include <libusb-1.0/libusb.h>
+#include <fcntl.h>
+#include <scsi/sg.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 static constexpr int WIDTH = 320;
 static constexpr int HEIGHT = 240;
 static uint32_t TAG = 1;
-static bool DEBUG = false;
+static bool DEBUG = true;
+
 BackgroundManager bg_manager;
 
 SystemInfoPoller::SystemInfoPoller(double fast_interval, double slow_interval)
@@ -793,97 +796,85 @@ bool SystemInfoPoller::nvidia_gpu_available()
 
 namespace
 {
-static libusb_device_handle* _dev = nullptr;
+static int sg_fd = -1;
 
-// Private helper
-static libusb_device_handle* open_dev(uint16_t vid_want,
-                                      uint16_t pid_want,
-                                      libusb_context* usbcontext = nullptr)
+static std::string find_sg_device(uint16_t target_vid, uint16_t target_pid)
 {
-  if (usbcontext == nullptr)
+  DIR* dir = opendir("/sys/class/scsi_generic");
+  if (!dir)
   {
-    libusb_init(&usbcontext);
+    return "";
   }
-  libusb_device** devs;
-  ssize_t cnt = libusb_get_device_list(usbcontext, &devs);
-  for (ssize_t i = 0; i < cnt; i++)
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != nullptr)
   {
-    libusb_device_handle* handle;
-    libusb_device_descriptor desc;
-    libusb_get_device_descriptor(devs[i], &desc);
-    if (desc.idVendor == vid_want && desc.idProduct == pid_want)
+    if (entry->d_name[0] == '.')
+      continue;
+
+    std::string sg_name = entry->d_name; // e.g., "sg0"
+
+    // Build path to device symlink
+    std::string device_path = "/sys/class/scsi_generic/" + sg_name + "/device";
+
+    // Try to find USB vendor/product IDs
+    std::string vendor_path = device_path + "/../../../../idVendor";
+    std::string product_path = device_path + "/../../../../idProduct";
+
+    std::ifstream vendor_file(vendor_path);
+    std::ifstream product_file(product_path);
+
+    if (vendor_file.is_open() && product_file.is_open())
     {
-      libusb_open(devs[i], &handle);
-      libusb_free_device_list(devs, 1);
-      return handle;
+      std::string vendor_str, product_str;
+      std::getline(vendor_file, vendor_str);
+      std::getline(product_file, product_str);
+
+      uint16_t found_vid = std::stoi(vendor_str, nullptr, 16);
+      uint16_t found_pid = std::stoi(product_str, nullptr, 16);
+
+      if (found_vid == target_vid && found_pid == target_pid)
+      {
+        closedir(dir);
+        std::string dev_path = "/dev/" + sg_name;
+        return dev_path;
+      }
     }
   }
-  libusb_free_device_list(devs, 1);
-  return nullptr;
-}
 
+  closedir(dir);
+  return "";
+}
 } // namespace
 
-// Public functions
-bool init_dev(uint16_t vid, uint16_t pid)
+bool init_dev()
 {
-  if (_dev != nullptr)
+  // Safely close down active file handles before switching paths
+  if (sg_fd >= 0)
   {
-    try
-    {
-      libusb_release_interface(_dev, 0);
-      libusb_close(_dev);
-    }
-    catch (...)
-    {
-    }
+    close(sg_fd);
+    sg_fd = -1;
   }
 
-  try
-  {
-    _dev = open_dev(vid, pid);
-  }
-  catch (...)
-  {
+  std::string dev_path = find_sg_device(0x0402, 0x3922);
+  if (dev_path.empty())
     return false;
-  }
 
-  libusb_set_auto_detach_kernel_driver(_dev, 1);
-
-  try
-  {
-    libusb_release_interface(_dev, 0);
-  }
-  catch (...)
-  {
+  // Open with standard read/write context
+  sg_fd = open(dev_path.c_str(), O_RDWR | O_NONBLOCK);
+  if (sg_fd < 0)
     return false;
-  }
-
-  try
-  {
-    libusb_claim_interface(_dev, 0);
-    libusb_reset_device(_dev);
-    return true;
-  }
-  catch (...)
-  {
+  if (!handshake_with_device())
     return false;
-  }
+  return true;
 }
 
 void cleanup_dev()
 {
-  if (_dev != nullptr)
+  if (sg_fd >= 0)
   {
-    try
-    {
-      libusb_release_interface(_dev, 0);
-      libusb_close(_dev);
-      _dev = nullptr;
-    }
-    catch (...)
-    {
-    }
+    close(sg_fd);
+    sg_fd = -1;
   }
 }
 
@@ -936,104 +927,83 @@ static std::string hex_str(const uint8_t* data, size_t len)
   return oss.str();
 }
 
+std::vector<uint8_t> build_cdb(uint32_t cmd, uint32_t size)
+{
+  std::vector<uint8_t> cdb(16, 0);
+
+  cdb[0] = (cmd >> 0) & 0xFF;
+  cdb[1] = (cmd >> 8) & 0xFF;
+  cdb[2] = (cmd >> 16) & 0xFF;
+  cdb[3] = (cmd >> 24) & 0xFF;
+
+  cdb[12] = (size >> 0) & 0xFF;
+  cdb[13] = (size >> 8) & 0xFF;
+  cdb[14] = (size >> 16) & 0xFF;
+  cdb[15] = (size >> 24) & 0xFF;
+
+  return cdb;
+}
+
 bool handshake_with_device()
 {
-  scsi_log("Starting handshake");
+  scsi_log("Starting handshake (LE Recovery Mode)");
 
-  // Define CDBs
-  const std::vector<uint8_t> inquiry_cdb = {0x12, 0, 0, 0, 36, 0}; // INQUIRY (alloc 36)
-  const std::vector<uint8_t> tur_cdb(6, 0x00); // TEST UNIT READY
-  const std::vector<uint8_t> sense_cdb = {0x03, 0, 0, 0, 18, 0}; // REQUEST SENSE (18)
-
-  // Poll command - read device state
-  const std::vector<uint8_t> poll_cdb = {
-      0xF5, 0x00, 0x00, 0x00, // poll command
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // 16 bytes total
-  };
-
-  // Init command - take control (send 0xE100 zeros)
-  const std::vector<uint8_t> init_cdb = {
-      0xF5, 0x01, 0x00, 0x00, // init command
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // 16 bytes total
-  };
-
-  const size_t POLL_SIZE = 0xE100; // 57600 bytes
-  std::vector<uint8_t> poll_response(POLL_SIZE);
-  std::vector<uint8_t> init_data(POLL_SIZE, 0x00); // 0xE100 zeros
-   ScsiResult res;
-
-  // Stage 1: Device identification
-  scsi_log("Stage 1: INQUIRY");
-  res = send_scsi_command(_dev, inquiry_cdb, {}, 0, 36);
+  // 1. Standard Inquiry to wake the USB stack
+  const std::vector<uint8_t> inquiry_cdb = {0x12, 0, 0, 0, 36, 0};
+  auto res = send_scsi_command(inquiry_cdb, {}, 36);
   if (!res.ok)
   {
-    scsi_log("INQUIRY failed");
+    scsi_log("Inquiry failed");
     return false;
   }
 
-  // Stage 2: Poll device state (with retries for animation interrupt)
-  scsi_log("Stage 2: Polling device");
-  const int MAX_POLL_ATTEMPTS = 10;
-  bool device_ready = false;
+  // 2. Wait for Chip Boot (0xF5 0x00)
+  // Poll until the status at offset 4 is NOT 0xA4A3A2A1
+  auto poll_cdb = build_cdb(0xF5, 0xE100);
+  const size_t POLL_SIZE = 0xE100;
+  std::vector<uint8_t> poll_response;
+  bool chip_ready = false;
 
-  for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS && !device_ready; ++attempt)
+  scsi_log("Stage 2: Waiting for boot status to clear...");
+  for (int i = 0; i < 15; ++i)
   {
-    if (attempt > 0)
-    {
-      scsi_log("Poll attempt " + std::to_string(attempt + 1) + "/" +
-               std::to_string(MAX_POLL_ATTEMPTS));
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    res = send_scsi_command(_dev, poll_cdb, poll_response, POLL_SIZE,0);
-    if (!res.ok)
-    {
-      scsi_log("Poll command failed, retrying...");
-      continue;
-    }
+    // FIX: poll_response is the destination (data_in_len), so data_out should be {}
+    res = send_scsi_command(poll_cdb, {}, POLL_SIZE);
 
-    // Check device state
-    uint8_t resolution_marker = poll_response[0];
-    uint32_t boot_status = *reinterpret_cast<uint32_t*>(&poll_response[4]);
-
-    if (boot_status == 0xA4A3A2A1)
-    { // Little-endian 0xA1A2A3A4
-      scsi_log("Device still booting, waiting...");
-      continue;
-    }
-
-    // Check for valid resolution marker
-    if (resolution_marker == 0x24 || // 240x240
-        resolution_marker == 0x32 || // 320x240 ('2')
-        resolution_marker == 0x33 || // 320x240 ('3')
-        resolution_marker == 0x64 || // 320x320 ('d')
-        resolution_marker == 0x65)
-    { // 320x320 ('e')
-      scsi_log("Device ready, resolution marker: 0x" + std::to_string(resolution_marker));
-      device_ready = true;
-    }
-    else
+    if (res.ok && res.data.size() >= 8)
     {
-      scsi_log("Unexpected resolution marker: 0x" + std::to_string(resolution_marker));
+      uint32_t boot_status = *reinterpret_cast<uint32_t*>(&res.data[4]);
+      if (boot_status != 0xA4A3A2A1)
+      {
+        scsi_log("Chip boot complete.");
+        chip_ready = true;
+        break;
+      }
     }
+    scsi_log("Still booting (0xA4A3A2A1)...");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  if (!device_ready)
-  {
-    scsi_log("Device failed to become ready after " + std::to_string(MAX_POLL_ATTEMPTS) +
-             " attempts");
+  if (!chip_ready)
     return false;
-  }
 
-  // Stage 3: Initialize display (interrupt animation)
-  scsi_log("Stage 3: Initializing display (sending 0xE100 zeros)");
-  res = send_scsi_command(_dev, init_cdb, init_data, 0, POLL_SIZE);
+  // 3. Stop Animation (0xF5 0x01)
+  // Now that the chip is up, send F5 01 with a blank chunk to kill the animation
+  scsi_log("Stage 3: Killing animation (F5 01)");
+  auto stop_anim_cdb = build_cdb(0x1F5, 0xE100); // 0x1F5 results in cdb[0]=F5, cdb[1]=01
+  std::vector<uint8_t> blank_chunk(POLL_SIZE, 0x00);
+
+  // This is an OUT transfer. data_in_len must be 0.
+  res = send_scsi_command(stop_anim_cdb, blank_chunk, 0);
+
   if (!res.ok)
   {
-    scsi_log("Init command failed");
+    scsi_log("Failed to stop animation");
     return false;
   }
 
-  scsi_log("Handshake complete - display control acquired");
+  scsi_log("Handshake complete. Device is ready for frames.");
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   return true;
 }
 
@@ -1041,224 +1011,90 @@ bool device_ready()
 {
   // TEST UNIT READY
   std::vector<uint8_t> tur_cdb(6, 0x00);
-  auto res = send_scsi_command(_dev, tur_cdb, {}, 0);
+  auto res = send_scsi_command(tur_cdb, {}, 0);
   // log_sense(res);
 
   if (res.ok)
   {
     return true;
   }
-
-  if (res.status == 1)
-  { // Check Condition
-    // REQUEST SENSE
-    std::vector<uint8_t> sense_cdb = {0x03, 0, 0, 0, 18, 0};
-    auto sense = send_scsi_command(_dev, sense_cdb, {}, 18);
-    // log_sense(sense);
-
-    if (sense.data.size() >= 14)
-    {
-      uint8_t key = sense.data[2] & 0x0F;
-      uint8_t asc = sense.data[12];
-      uint8_t ascq = sense.data[13];
-    }
-
-    // Perform BOT reset + clear halt (like Windows)
-    int rc = libusb_control_transfer(_dev,
-                                     0x21, // bmRequestType: Host->Interface | Class | Interface
-                                     0xFF, // bRequest: Mass Storage Reset
-                                     0, // wValue
-                                     0, // wIndex = interface number (store this at init_dev())
-                                     0, // wLength
-                                     0, 1000);
-    if (rc < 0)
-    {
-    }
-
-    libusb_clear_halt(_dev, 0x81); // bulk IN
-    libusb_clear_halt(_dev, 0x02); // bulk OUT
-    return false;
-  }
-
-  if (res.status == 2)
-  { // Phase Error
-    libusb_control_transfer(_dev, 0x21, 0xFF, 0, 0, 0, 0, 1000);
-    libusb_clear_halt(_dev, 0x81);
-    libusb_clear_halt(_dev, 0x02);
-    return false;
-  }
   return false;
 }
 
-void reset_transport()
-{
-  if (!_dev)
-  {
-    return;
-  }
-
-  // Mass Storage Reset
-  int rc = libusb_control_transfer(_dev, 0x21, 0xFF, 0, 0, 0, 0, 1000);
-  std::ofstream log("scsi_log.txt", std::ios::app);
-  log << "[RESET] Mass Storage Reset rc=" << rc << "\n";
-
-  // Clear halts
-  rc = libusb_clear_halt(_dev, 0x81);
-  log << "[RESET] clear_halt IN  rc=" << rc << "\n";
-  rc = libusb_clear_halt(_dev, 0x02);
-  log << "[RESET] clear_halt OUT rc=" << rc << "\n";
-
-  log.close();
-}
-
-ScsiResult send_scsi_command(libusb_device_handle* dev,
-                             const std::vector<uint8_t>& cdb,
+ScsiResult send_scsi_command(const std::vector<uint8_t>& cdb,
                              const std::vector<uint8_t>& data_out,
                              size_t data_in_len,
-                             unsigned int tag)
+                             unsigned int /*tag*/)
 {
-  std::vector<uint8_t> data_in;
-
-  // Build CBW
-  std::vector<uint8_t> cbw(31, 0);
-  cbw[0] = 'U';
-  cbw[1] = 'S';
-  cbw[2] = 'B';
-  cbw[3] = 'C';
-
-  if (tag == 0)
-    tag = TAG++;
-  cbw[4] = tag & 0xFF;
-  cbw[5] = (tag >> 8) & 0xFF;
-  cbw[6] = (tag >> 16) & 0xFF;
-  cbw[7] = (tag >> 24) & 0xFF;
-
-  uint32_t data_len = data_in_len ? data_in_len : data_out.size();
-  cbw[8] = data_len & 0xFF;
-  cbw[9] = (data_len >> 8) & 0xFF;
-  cbw[10] = (data_len >> 16) & 0xFF;
-  cbw[11] = (data_len >> 24) & 0xFF;
-
-  cbw[12] = data_in_len ? 0x80 : 0x00; // Flags: 0x80 = IN, 0x00 = OUT
-  cbw[13] = 0; // LUN
-  cbw[14] = static_cast<uint8_t>(cdb.size());
-
-  std::memcpy(cbw.data() + 15, cdb.data(), cdb.size());
-  // Convert CBW vector to hex string for logging
-  std::string cbw_string;
-  for (uint8_t b : cbw)
-  {
-    char buf[3];
-    snprintf(buf, sizeof(buf), "%02x", b);
-    cbw_string += buf;
-    cbw_string += ' ';
-  }
-  scsi_log("CBW: " + cbw_string);
-  scsi_log("CDB data size is " + std::to_string(cdb.size()));
-  // Send CBW
-  int transferred = 0;
-  int rc = libusb_bulk_transfer(dev, 0x02, cbw.data(), cbw.size(), &transferred, 1000);
-  if (rc != 0 || static_cast<size_t>(transferred) != cbw.size())
-  {
-    ScsiResult blktrans;
-    blktrans.ok = false;
-    return blktrans;
-  }
-
-  // Data phase
-  if (data_in_len)
-  {
-    data_in.resize(data_in_len);
-    rc = libusb_bulk_transfer(dev, 0x81, data_in.data(), data_in_len, &transferred, 2000);
-    if (rc != 0)
-    {
-      ScsiResult tmpres; tmpres.ok = false; tmpres.status = 2; return tmpres;
-    }
-  }
-  else if (!data_out.empty())
-  {
-    rc = libusb_bulk_transfer(dev, 0x02, const_cast<uint8_t*>(data_out.data()), data_out.size(),
-                              &transferred, 2000);
-    if (rc != 0)
-    {
-      ScsiResult tmpres; tmpres.ok = false; tmpres.status = 2; return tmpres;
-    }
-  }
   ScsiResult result;
-  result.data = std::move(data_in);
+  result.ok = false;
+  result.status = 0;
 
-  // CSW
-  std::vector<uint8_t> csw(13);
-  rc = libusb_bulk_transfer(dev, 0x81, csw.data(), csw.size(), &transferred, 1000);
-  if (rc != 0 || transferred != 13 || std::memcmp(csw.data(), "USBS", 4) != 0)
+  if (sg_fd < 0)
   {
-    result.status = 2; // Phase Error
-    result.ok = false;
-    {
-      static std::mutex log_mutex;
-      std::lock_guard<std::mutex> lock(log_mutex);
-      if (DEBUG)
-      {
-        std::ofstream log("scsi_log.txt", std::ios::app);
-
-        log << "[SCSI] CDB: ";
-        for (auto b : cdb)
-          log << std::hex << std::setw(2) << std::setfill('0') << (int)b << " ";
-        log << " | CSW invalid (rc=" << rc << " transferred=" << transferred << ")\n";
-
-        log.close();
-      }
-    }
-
+    scsi_log("Error: SG device file descriptor is not open.");
     return result;
   }
 
-  // Parse CSW
-  result.status = csw[12];
-  result.ok = (result.status == 0);
-  result.data = std::move(data_in);
+  sg_io_hdr_t io_hdr;
+  std::memset(&io_hdr, 0, sizeof(io_hdr));
 
-  static std::mutex log_mutex; // protect logfile if called from multiple threads
+  unsigned char sense_buffer[32];
+  std::memset(sense_buffer, 0, sizeof(sense_buffer));
 
-  std::lock_guard<std::mutex> lock(log_mutex);
+  io_hdr.interface_id = 'S';
+  io_hdr.cmd_len = static_cast<unsigned char>(cdb.size());
+  io_hdr.cmdp = const_cast<unsigned char*>(cdb.data());
+  io_hdr.sbp = sense_buffer;
+  io_hdr.mx_sb_len = sizeof(sense_buffer);
+  io_hdr.timeout = 5000; // 5-second deadline
+
+  // Bind memory layouts seamlessly based on direction flags
+  if (data_in_len > 0)
+  {
+    result.data.resize(data_in_len);
+    io_hdr.dxfer_direction = SG_DXFER_FROM_DEV;
+    io_hdr.dxfer_len = static_cast<unsigned int>(data_in_len);
+    io_hdr.dxferp = result.data.data();
+  }
+  else if (!data_out.empty())
+  {
+    io_hdr.dxfer_direction = SG_DXFER_TO_DEV;
+    io_hdr.dxfer_len = static_cast<unsigned int>(data_out.size());
+    io_hdr.dxferp = const_cast<unsigned char*>(data_out.data());
+  }
+  else
+  {
+    io_hdr.dxfer_direction = SG_DXFER_NONE;
+  }
+
+  // Issue the direct driver ioctl block command
+  if (ioctl(sg_fd, SG_IO, &io_hdr) < 0)
+  {
+    scsi_log("SG_IO ioctl system failure");
+    return result;
+  }
+
+  result.status = io_hdr.status;
+  result.ok = (io_hdr.status == 0); // 0x00 is SCSI GOOD status
+
   if (DEBUG)
   {
+    std::lock_guard<std::mutex> lock(scsi_log_mutex);
     std::ofstream log("scsi_log.txt", std::ios::app);
-
-    log << "[SCSI] CDB: ";
+    log << "[SCSI SG_IO] CDB: ";
     for (auto b : cdb)
       log << std::hex << std::setw(2) << std::setfill('0') << (int)b << " ";
-
     log << " | Status=" << std::dec << (int)result.status << " ok=" << result.ok
         << " DataIn=" << result.data.size() << " bytes\n";
-
-    // If it was REQUEST SENSE and data is long enough, decode ASC/ASCQ
-    if (!cdb.empty() && cdb[0] == 0x03 && result.data.size() >= 14)
-    {
-      uint8_t key = result.data[2] & 0x0F;
-      uint8_t asc = result.data[12];
-      uint8_t ascq = result.data[13];
-      log << "  [SENSE] key=" << (int)key << " ASC=0x" << std::hex << (int)asc << " ASCQ=0x"
-          << (int)ascq << std::dec << "\n";
-    }
-
     log.close();
   }
 
   return result;
 }
 
-bool update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev)
+bool update_lcd_image(const uint8_t* pil_img)
 {
-  if (dev == nullptr)
-  {
-    dev = _dev;
-  }
-  if (dev == nullptr)
-  {
-    return false;
-  }
-
   // Convert to chunks of RGB565
   auto chunks = ImageConverter::image_to_rgb565_chunks(pil_img);
 
@@ -1278,15 +1114,16 @@ bool update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev)
     cdb[15] = (length >> 24) & 0xFF;
 
     {
-      ScsiResult res = send_scsi_command(dev, cdb, chunks[idx]);
-      if (!res.ok) {
+      ScsiResult res = send_scsi_command(cdb, chunks[idx]);
+      if (!res.ok)
+      {
         // USB transfer failed for this chunk — signal failure to caller
         return false;
       }
     }
   }
-    // All chunks sent successfully
-    return true;
+  // All chunks sent successfully
+  return true;
 }
 
 // --- ImageConverter ---
@@ -1521,211 +1358,260 @@ BackgroundManager& get_background_manager()
 // ------------------ BackgroundManager streaming & overlays implementation ------------------
 
 // Helper: alpha blend RGBA src into BGR dst at (ox,oy)
-static void alpha_blend_bgr(cv::Mat &dst, const cv::Mat &src, int ox, int oy)
+static void alpha_blend_bgr(cv::Mat& dst, const cv::Mat& src, int ox, int oy)
 {
-    // dst: CV_8UC3 (BGR)
-    // src: CV_8UC4 (BGRA or RGBA depending on how you prepare it)
-    if (dst.empty() || src.empty()) return;
-    // Ensure types
-    if (dst.type() != CV_8UC3 || src.type() != CV_8UC4) return;
+  // dst: CV_8UC3 (BGR)
+  // src: CV_8UC4 (BGRA or RGBA depending on how you prepare it)
+  if (dst.empty() || src.empty())
+    return;
+  // Ensure types
+  if (dst.type() != CV_8UC3 || src.type() != CV_8UC4)
+    return;
 
-    int w = src.cols;
-    int h = src.rows;
-    for (int row = 0; row < h; ++row)
+  int w = src.cols;
+  int h = src.rows;
+  for (int row = 0; row < h; ++row)
+  {
+    int dy = oy + row;
+    if (dy < 0 || dy >= dst.rows)
+      continue;
+    const cv::Vec4b* srow = src.ptr<cv::Vec4b>(row);
+    cv::Vec3b* drow = dst.ptr<cv::Vec3b>(dy);
+    for (int col = 0; col < w; ++col)
     {
-        int dy = oy + row;
-        if (dy < 0 || dy >= dst.rows) continue;
-        const cv::Vec4b* srow = src.ptr<cv::Vec4b>(row);
-        cv::Vec3b* drow = dst.ptr<cv::Vec3b>(dy);
-        for (int col = 0; col < w; ++col)
-        {
-            int dx = ox + col;
-            if (dx < 0 || dx >= dst.cols) continue;
+      int dx = ox + col;
+      if (dx < 0 || dx >= dst.cols)
+        continue;
 
-            const cv::Vec4b &sp = srow[col];
-            unsigned char a = sp[3];
-            if (a == 0) continue;
+      const cv::Vec4b& sp = srow[col];
+      unsigned char a = sp[3];
+      if (a == 0)
+        continue;
 
-            float alpha = a / 255.0f;
-            cv::Vec3b &dp = drow[dx];
+      float alpha = a / 255.0f;
+      cv::Vec3b& dp = drow[dx];
 
-            // Assuming src is BGRA order; if your bytes are RGBA, convert before storing
-            dp[0] = static_cast<unsigned char>(sp[0] * alpha + dp[0] * (1.0f - alpha));
-            dp[1] = static_cast<unsigned char>(sp[1] * alpha + dp[1] * (1.0f - alpha));
-            dp[2] = static_cast<unsigned char>(sp[2] * alpha + dp[2] * (1.0f - alpha));
-        }
+      // Assuming src is BGRA order; if your bytes are RGBA, convert before storing
+      dp[0] = static_cast<unsigned char>(sp[0] * alpha + dp[0] * (1.0f - alpha));
+      dp[1] = static_cast<unsigned char>(sp[1] * alpha + dp[1] * (1.0f - alpha));
+      dp[2] = static_cast<unsigned char>(sp[2] * alpha + dp[2] * (1.0f - alpha));
     }
+  }
 }
 
 // Update overlay RGBA from Python (data points to contiguous RGBA bytes)
-void BackgroundManager::update_overlay_rgba(const std::string &tag,
-                                            const uint8_t* data, int w, int h, int x, int y)
+void BackgroundManager::update_overlay_rgba(
+    const std::string& tag, const uint8_t* data, int w, int h, int x, int y)
 {
-    if (!data || w <= 0 || h <= 0) return;
-    try {
-        // Wrap input bytes with Mat header (RGBA)
-        cv::Mat tmp_rgba(h, w, CV_8UC4, const_cast<uint8_t*>(data));
-        // Convert RGBA -> BGRA because OpenCV tends to use BGR ordering
-        cv::Mat tmp_bgra;
-        cv::cvtColor(tmp_rgba, tmp_bgra, cv::COLOR_RGBA2BGRA);
+  if (!data || w <= 0 || h <= 0)
+    return;
+  try
+  {
+    // Wrap input bytes with Mat header (RGBA)
+    cv::Mat tmp_rgba(h, w, CV_8UC4, const_cast<uint8_t*>(data));
+    // Convert RGBA -> BGRA because OpenCV tends to use BGR ordering
+    cv::Mat tmp_bgra;
+    cv::cvtColor(tmp_rgba, tmp_bgra, cv::COLOR_RGBA2BGRA);
 
-        std::lock_guard<std::mutex> lk(overlays_mutex);
-        overlays_rgba[tag] = tmp_bgra.clone(); // store BGRA
-        overlay_pos[tag] = cv::Point(x, y);
-    } catch (const std::exception &e) {
-        std::cerr << "update_overlay_rgba exception: " << e.what() << std::endl;
-    }
+    std::lock_guard<std::mutex> lk(overlays_mutex);
+    overlays_rgba[tag] = tmp_bgra.clone(); // store BGRA
+    overlay_pos[tag] = cv::Point(x, y);
+  }
+  catch (const std::exception& e)
+  {
+    std::cerr << "update_overlay_rgba exception: " << e.what() << std::endl;
+  }
 }
 
-void BackgroundManager::clear_overlay(const std::string &tag)
+void BackgroundManager::clear_overlay(const std::string& tag)
 {
-    std::lock_guard<std::mutex> lk(overlays_mutex);
-    overlays_rgba.erase(tag);
-    overlay_pos.erase(tag);
+  std::lock_guard<std::mutex> lk(overlays_mutex);
+  overlays_rgba.erase(tag);
+  overlay_pos.erase(tag);
 }
 
 void BackgroundManager::set_error_callback(std::function<void(const std::string&)> cb)
 {
-    py_error_callback = std::move(cb);
+  py_error_callback = std::move(cb);
 }
 
 void BackgroundManager::stop_lcd_stream()
 {
-    stop_request.store(true);
-    // Let thread exit; lcd_stream_running will be cleared once it finishes
-    if (lcd_thread.joinable())
-    {
-        // we avoid blocking join here because thread is detached in start_lcd_stream;
-        // if you prefer a join, set a join policy.
-    }
+  stop_request.store(true);
+  // Let thread exit; lcd_stream_running will be cleared once it finishes
+  if (lcd_thread.joinable())
+  {
+        lcd_thread.join();
+  }
 }
-
 
 bool BackgroundManager::safe_lcd_write(const uint8_t* data_ptr)
 {
-    std::lock_guard<std::mutex> devlk(lcd_io_mutex);
-    return update_lcd_image(data_ptr); // your existing USB send
+  std::lock_guard<std::mutex> devlk(lcd_io_mutex);
+  return update_lcd_image(data_ptr);
 }
 // Streaming compositor: runs in background thread, composes frame and sends to LCD at ~25 FPS
-void BackgroundManager::start_lcd_stream(const std::string &video_path_in, const std::string &image_path_in)
+void BackgroundManager::start_lcd_stream(const std::string& video_path_in,
+                                         const std::string& image_path_in)
 {
-    // Prevent multiple starts
+  // Prevent multiple starts
     if (lcd_stream_running.load()) return;
+
+    // Clean up any old finished thread handle before creating a new one
+    if (lcd_thread.joinable()) {
+        lcd_thread.join();
+    }
 
     stop_request.store(false);
     lcd_stream_running.store(true);
 
-    // Copy paths local to thread (if given). If you manage global state, adapt as needed.
-    std::string video_path_local = video_path_in.empty() ? this->video_path : video_path_in;
-    std::string image_path_local = image_path_in.empty() ? this->image_path : image_path_in;
+  std::string video_path_local = video_path_in.empty() ? this->video_path : video_path_in;
+  std::string image_path_local = image_path_in.empty() ? this->image_path : image_path_in;
 
-    lcd_thread = std::thread([this, video_path_local, image_path_local]() {
-        try {
-            while (!stop_request.load())
+  lcd_thread = std::thread(
+      [this, video_path_local, image_path_local]()
+      {
+        try
+        {
+          while (!stop_request.load())
+          {
+            // 1) get background frame
+            cv::Mat frame =
+                this->get_background(video_path_local, image_path_local); // may be BGR or BGRA
+
+            if (frame.empty())
             {
-                // 1) get background frame (this uses your existing get_background implementation)
-                cv::Mat frame = this->get_background(video_path_local, image_path_local); // may be BGR or BGRA
-
-                if (frame.empty()) {
-                    // create fallback if necessary
-                    frame = this->create_default_background();
-                }
-
-                // Ensure BGR CV_8UC3 for blending
-                cv::Mat base;
-                if (frame.channels() == 4) {
-                    cv::cvtColor(frame, base, cv::COLOR_BGRA2BGR);
-                } else if (frame.channels() == 3) {
-                    base = frame;
-                } else {
-                    // unexpected channels, convert to BGR
-                    cv::cvtColor(frame, base, cv::COLOR_GRAY2BGR);
-                }
-
-                // 2) Blend overlays
-                {
-                    std::lock_guard<std::mutex> lk(overlays_mutex);
-                    for (auto &kv : overlays_rgba) {
-                        const std::string &tag = kv.first;
-                        const cv::Mat &ov = kv.second;
-                        auto itp = overlay_pos.find(tag);
-                        int ox = 0, oy = 0;
-                        if (itp != overlay_pos.end()) { ox = itp->second.x; oy = itp->second.y; }
-                        if (!ov.empty()) {
-                            alpha_blend_bgr(base, ov, ox, oy);
-                        }
-                    }
-                }
-
-                // 3) Convert base BGR -> RGB for sending & for storing last_frame
-                cv::Mat rgb_img;
-                cv::cvtColor(base, rgb_img, cv::COLOR_BGR2RGB);
-
-                // Store last_frame (thread-safe)
-                {
-                    std::lock_guard<std::mutex> lk(last_frame_mutex);
-                    last_frame = rgb_img.clone();
-                }
-
-                // 4) Send to LCD - call your existing function that sends bytes to device
-                // convert to contiguous buffer if needed
-                cv::Mat send_img;
-                if (!rgb_img.isContinuous()) send_img = rgb_img.clone();
-                else send_img = rgb_img;
-
-                const uint8_t *data_ptr = send_img.ptr<uint8_t>(0);
-
-                bool ok = false;
-                try {
-                    ok = safe_lcd_write(data_ptr); // your existing USB write function that returns bool
-                } catch (const std::exception &e) {
-                    std::cerr << "update_lcd_image threw: " << e.what() << std::endl;
-                    ok = false;
-                }
-
-                if (!ok) {
-                    // notify python and stop streaming for manual resume
-                    if (py_error_callback) {
-                        try {
-                            py_error_callback("LCD communication failed. Click OK to retry.");
-                        } catch (const std::exception &e) {
-                            std::cerr << "py_error_callback threw: " << e.what() << std::endl;
-                        }
-                    }
-                    break; // exit streaming loop (Python will show modal and call start again)
-                }
-
-                // 5) Sleep to target ~25 FPS (40ms). If video has timing/sync features use that instead.
-                std::this_thread::sleep_for(std::chrono::milliseconds(40));
+              // create fallback if necessary
+              frame = this->create_default_background();
             }
-        } catch (const std::exception &e) {
-            if (py_error_callback) {
-                try { py_error_callback(std::string("LCD stream exception: ") + e.what()); } catch(...) {}
+
+            // Ensure BGR CV_8UC3 for blending
+            cv::Mat base;
+            if (frame.channels() == 4)
+            {
+              cv::cvtColor(frame, base, cv::COLOR_BGRA2BGR);
             }
+            else if (frame.channels() == 3)
+            {
+              base = frame;
+            }
+            else
+            {
+              // unexpected channels, convert to BGR
+              cv::cvtColor(frame, base, cv::COLOR_GRAY2BGR);
+            }
+
+            // 2) Blend overlays
+            {
+              std::lock_guard<std::mutex> lk(overlays_mutex);
+              for (auto& kv : overlays_rgba)
+              {
+                const std::string& tag = kv.first;
+                const cv::Mat& ov = kv.second;
+                auto itp = overlay_pos.find(tag);
+                int ox = 0, oy = 0;
+                if (itp != overlay_pos.end())
+                {
+                  ox = itp->second.x;
+                  oy = itp->second.y;
+                }
+                if (!ov.empty())
+                {
+                  alpha_blend_bgr(base, ov, ox, oy);
+                }
+              }
+            }
+
+            // 3) Convert base BGR -> RGB for sending & for storing last_frame
+            cv::Mat rgb_img;
+            cv::cvtColor(base, rgb_img, cv::COLOR_BGR2RGB);
+
+            // Store last_frame (thread-safe)
+            {
+              std::lock_guard<std::mutex> lk(last_frame_mutex);
+              last_frame = rgb_img.clone();
+            }
+
+            // 4) Send to LCD
+            // convert to contiguous buffer if needed
+            cv::Mat send_img;
+            if (!rgb_img.isContinuous())
+              send_img = rgb_img.clone();
+            else
+              send_img = rgb_img;
+
+            const uint8_t* data_ptr = send_img.ptr<uint8_t>(0);
+
+            bool ok = false;
+            try
+            {
+              ok = safe_lcd_write(data_ptr);
+            }
+            catch (const std::exception& e)
+            {
+              std::cerr << "update_lcd_image threw: " << e.what() << std::endl;
+              ok = false;
+            }
+
+            if (!ok)
+            {
+              // notify python and stop streaming for manual resume
+              if (py_error_callback)
+              {
+                try
+                {
+                  py_error_callback("LCD communication failed. Click OK to retry.");
+                }
+                catch (const std::exception& e)
+                {
+                  std::cerr << "py_error_callback threw: " << e.what() << std::endl;
+                }
+              }
+              break; // exit streaming loop (Python will show modal and call start again)
+            }
+
+            // 5) Sleep to target ~25 FPS (40ms). If video has timing/sync features use that instead.
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+          }
+        }
+        catch (const std::exception& e)
+        {
+          if (py_error_callback)
+          {
+            try
+            {
+              py_error_callback(std::string("LCD stream exception: ") + e.what());
+            }
+            catch (...)
+            {
+            }
+          }
         }
 
         lcd_stream_running.store(false);
-    });
+      });
 
-    // detach the thread to continue running independently; stop_lcd_stream flips flag to stop
-    lcd_thread.detach();
+  // detach the thread to continue running independently; stop_lcd_stream flips flag to stop
+  //lcd_thread.detach();
 }
 
 // Returns last composited frame as bytes (RGB)
 std::vector<uint8_t> BackgroundManager::get_last_frame_bytes_vec()
 {
-    std::lock_guard<std::mutex> lk(last_frame_mutex);
-    if (last_frame.empty()) return {};
-    cv::Mat out;
-    if (!last_frame.isContinuous()) out = last_frame.clone();
-    else out = last_frame;
-    size_t n = out.total() * out.elemSize();
-    std::vector<uint8_t> vec(out.ptr<uint8_t>(0), out.ptr<uint8_t>(0) + n);
-    return vec;
+  std::lock_guard<std::mutex> lk(last_frame_mutex);
+  if (last_frame.empty())
+    return {};
+  cv::Mat out;
+  if (!last_frame.isContinuous())
+    out = last_frame.clone();
+  else
+    out = last_frame;
+  size_t n = out.total() * out.elemSize();
+  std::vector<uint8_t> vec(out.ptr<uint8_t>(0), out.ptr<uint8_t>(0) + n);
+  return vec;
 }
 
 // --------------------------------------------------------------------------------------------
-
 
 void VideoBackground::start_playback()
 {
@@ -1992,7 +1878,7 @@ void ConfigManager::addDefaultModules()
 
 bool ConfigManager::load_config(const std::string& path)
 {
-  // Start fresh from defaults (like Python version)
+  // Start fresh from defaults
   load_config_from_defaults();
 
   // Try to load from file if it exists

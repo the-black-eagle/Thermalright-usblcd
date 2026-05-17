@@ -23,17 +23,16 @@
 #include <cstdint>
 #include <ctime>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
-#include <iomanip>
 
-#include <libusb-1.0/libusb.h>
-#include <opencv2/opencv.hpp>
 #include <nlohmann/json.hpp>
+#include <opencv2/opencv.hpp>
 
 class SystemInfoPoller
 {
@@ -189,23 +188,28 @@ private:
 class BackgroundManager
 {
 public:
-  std::vector<uint8_t> get_background_bytes(const std::string& video_path = "", const std::string& image_path = "");
-   // New streaming / overlay API
-    void start_lcd_stream(const std::string &video_path = "", const std::string &image_path = "");
-    void stop_lcd_stream();
-    void update_overlay_rgba(const std::string &tag, const uint8_t* data, int w, int h, int x, int y);
-    void clear_overlay(const std::string &tag);
-    std::vector<uint8_t> get_last_frame_bytes_vec();
-    void set_error_callback(std::function<void(const std::string&)> cb);
-    bool safe_lcd_write(const uint8_t* data_ptr);
-
+  ~BackgroundManager()
+  {
+    // Ensure the stream loop is entirely dead before members are destroyed
+    stop_lcd_stream();
+  }
+  std::vector<uint8_t> get_background_bytes(const std::string& video_path = "",
+                                            const std::string& image_path = "");
+  // New streaming / overlay API
+  void start_lcd_stream(const std::string& video_path = "", const std::string& image_path = "");
+  void stop_lcd_stream();
+  void update_overlay_rgba(const std::string& tag, const uint8_t* data, int w, int h, int x, int y);
+  void clear_overlay(const std::string& tag);
+  std::vector<uint8_t> get_last_frame_bytes_vec();
+  void set_error_callback(std::function<void(const std::string&)> cb);
+  bool safe_lcd_write(const uint8_t* data_ptr);
 
 private:
   cv::Mat create_default_background();
   void set_background_paths(const std::string& image, const std::string& video);
   cv::Mat load_static_background(const std::string& background_path);
-  cv::Mat get_background(const std::string& video_path = "", const std::string& image_path= "");
-  cv::Mat compose_with_video(const cv::Mat &argb_image, const cv::Mat &video_frame);
+  cv::Mat get_background(const std::string& video_path = "", const std::string& image_path = "");
+  cv::Mat compose_with_video(const cv::Mat& argb_image, const cv::Mat& video_frame);
 
   cv::Mat static_bg;
   std::string static_bg_path;
@@ -216,42 +220,45 @@ private:
   std::string image_path;
   std::string video_path;
   std::mutex last_frame_mutex;
-   // New members
-    std::mutex overlays_mutex;
-    std::unordered_map<std::string, cv::Mat> overlays_rgba;
-    std::unordered_map<std::string, cv::Point> overlay_pos;
+  // New members
+  std::mutex overlays_mutex;
+  std::unordered_map<std::string, cv::Mat> overlays_rgba;
+  std::unordered_map<std::string, cv::Point> overlay_pos;
 
-    cv::Mat last_frame; // RGB CV_8UC3
+  cv::Mat last_frame; // RGB CV_8UC3
 
-    std::atomic<bool> lcd_stream_running{false};
-    std::atomic<bool> stop_request{false};
-    std::thread lcd_thread;
-    std::mutex lcd_io_mutex;
-    std::function<void(const std::string&)> py_error_callback;
+  std::atomic<bool> lcd_stream_running{false};
+  std::atomic<bool> stop_request{false};
+  std::thread lcd_thread;
+  std::mutex lcd_io_mutex;
+  std::function<void(const std::string&)> py_error_callback;
 };
 
-class ConfigManager {
+class ConfigManager
+{
 public:
-    explicit ConfigManager(const std::string& path);
+  explicit ConfigManager(const std::string& path);
 
-    bool load_config(const std::string& path);
+  bool load_config(const std::string& path);
 
-    std::string dump(int indent = 4) const;
+  std::string dump(int indent = 4) const;
 
-    nlohmann::json get_value(const std::string& key) const;
-    void set_value(const std::string& key, const nlohmann::json& value);
+  nlohmann::json get_value(const std::string& key) const;
+  void set_value(const std::string& key, const nlohmann::json& value);
 
-    bool load_config_from_defaults();
-    nlohmann::json get_config() const { return _data; }  // Returns a copy, auto-converts to Python dict
-    void update_config_value(const std::string& key, const nlohmann::json& value);
-    bool save_config(const std::string& path) const;
+  bool load_config_from_defaults();
+  nlohmann::json get_config() const
+  {
+    return _data;
+  } // Returns a copy, auto-converts to Python dict
+  void update_config_value(const std::string& key, const nlohmann::json& value);
+  bool save_config(const std::string& path) const;
 
 private:
-    void addDefaultModules();
-    std::string _path;
-    nlohmann::json _data;
+  void addDefaultModules();
+  std::string _path;
+  nlohmann::json _data;
 };
-
 
 // --- USB helpers ---
 
@@ -264,11 +271,12 @@ struct ScsiResult
 
 static std::mutex scsi_log_mutex;
 
-bool init_dev(uint16_t vid = 0x0402, uint16_t pid = 0x3922);
-static void scsi_log(const std::string &msg);
+bool init_dev();
+static void scsi_log(const std::string& msg);
 
 void cleanup_dev();
 bool device_ready();
+std::vector<uint8_t> build_cdb(uint32_t cmd, uint32_t size);
 bool handshake_with_device();
 
 void reset_transport();
@@ -277,10 +285,10 @@ void log_sense(const ScsiResult& result);
 //internal routines
 
 BackgroundManager& get_background_manager();
-bool update_lcd_image(const uint8_t* pil_img, libusb_device_handle* dev = nullptr);
-ScsiResult send_scsi_command(libusb_device_handle* dev,
-                             const std::vector<uint8_t>& cdb,
+bool update_lcd_image(const uint8_t* pil_img);
+ScsiResult send_scsi_command(const std::vector<uint8_t>& cdb,
                              const std::vector<uint8_t>& data_out = {},
-                             size_t data_in_len = 0, unsigned int tag = 0);
+                             size_t data_in_len = 0,
+                             unsigned int tag = 0);
 
 #endif // LCD_DRIVER_H
